@@ -134,7 +134,7 @@ class CSXClient:
 
     def _sign(self, method: str, url_path: str, body: str = ""):
         try:
-            import ed25519
+            from nacl.signing import SigningKey as NaClSigningKey
             timestamp = str(int(time.time()))
             if not body:
                 body = "{}"
@@ -142,11 +142,15 @@ class CSXClient:
             input_body = json.dumps(body_dict, separators=(",", ":"), sort_keys=True)
             message = timestamp + method + url_path + input_body
             private_key_bytes = bytes.fromhex(self.secret_key)
-            signing_key = ed25519.SigningKey(private_key_bytes)
-            signature = signing_key.sign(message.encode("utf-8")).hex()
+            # PyNaCl expects a 32-byte seed; if 64 bytes provided, use first 32
+            if len(private_key_bytes) == 64:
+                private_key_bytes = private_key_bytes[:32]
+            signing_key = NaClSigningKey(private_key_bytes)
+            signed = signing_key.sign(message.encode("utf-8"))
+            signature = signed.signature.hex()
             return timestamp, signature
         except ImportError:
-            # Fallback: use HMAC if ed25519 not available
+            # Fallback: use HMAC if PyNaCl not available
             timestamp = str(int(time.time()))
             message = timestamp + method + url_path + (body or "{}")
             signature = hmac.new(
