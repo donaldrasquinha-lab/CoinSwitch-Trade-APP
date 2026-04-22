@@ -1,0 +1,131 @@
+# ₿ CoinSwitch PRO — Bitcoin Options Trading Dashboard
+
+A full-featured **Streamlit** trading terminal for **CoinSwitch PRO** / **CSX Exchange** APIs, built for Bitcoin options trading on the Indian market.
+
+![Python](https://img.shields.io/badge/Python-3.9+-blue) ![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-red) ![CoinSwitch](https://img.shields.io/badge/CoinSwitch_PRO-API-green)
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Options Chain** | Simulated BTC/ETH/SOL options chain with Black-Scholes pricing, Greeks (Delta, Gamma, Theta, Vega), IV, and moneyness indicators |
+| **Payoff Diagrams** | Interactive Call/Put payoff visualization |
+| **Spot Order Placement** | Place LIMIT/MARKET orders on BTC/INR, ETH/INR, BTC/USDT via CoinSwitch PRO API |
+| **Options Order Form** | Options order builder for BTC-CALL/PUT with strike, expiry, and contracts |
+| **Live Order Book** | Real-time bid/ask depth from CSX Exchange API |
+| **Recent Trades** | Latest trade feed from the exchange |
+| **Portfolio & Balances** | View available & locked balances across all assets |
+| **Order History** | Open and completed orders with cancel functionality |
+| **P&L Calculator** | Options profit/loss calculator with ROI, breakeven, and visual P&L curves |
+| **Sandbox Mode** | Paper trading via CSX sandbox endpoint |
+| **Dual API Support** | Works with both CoinSwitch Legacy API and CSX Exchange API |
+
+---
+
+## Prerequisites
+
+1. **CoinSwitch PRO Account** — Sign up at [coinswitch.co/pro](https://coinswitch.co/pro)
+2. **API Keys** — Generate from Profile → API Trading in the CoinSwitch PRO app
+3. **Python 3.9+**
+
+---
+
+## Setup
+
+```bash
+# Clone or copy the project
+cd coinswitch_trader
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the app
+streamlit run app.py
+```
+
+The app will open at `http://localhost:8501`
+
+---
+
+## Configuration
+
+1. Open the app in your browser
+2. In the **sidebar**, paste your **API Key** and **Secret Key**
+3. Choose your **API Mode**:
+   - **CoinSwitch Legacy** — Uses HMAC-SHA256 signed endpoints (`/trade/api/v2/...`)
+   - **CSX Exchange** — Uses Ed25519 signed endpoints (`/api/v1/...`, `/api/v2/...`)
+4. Enable **Sandbox Mode** for paper trading (no real money)
+5. Select your default exchange (coinswitchx or wazirx)
+
+---
+
+## API Endpoints Used
+
+### CoinSwitch Legacy API
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /trade/api/v2/order` | Place orders |
+| `GET /trade/api/v2/portfolio` | Portfolio |
+| `GET /trade/api/v2/orders` | Order history |
+| `GET /trade/api/v2/24hr/ticker` | 24hr ticker |
+| `GET /trade/api/v2/candles` | Candlestick data |
+| `POST /trade/api/v2/cancel` | Cancel orders |
+
+### CSX Exchange API
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/v2/orders/` | Place orders |
+| `GET /api/v2/me/balance/` | Balances |
+| `GET /api/v1/me/orders/` | Order history |
+| `GET /api/v2/public/ticker/` | Ticker |
+| `GET /api/v2/public/depth` | Order book |
+| `GET /api/v1/public/trades/` | Recent trades |
+| `DELETE /api/v1/orders/{id}` | Cancel order |
+
+---
+
+## Options Trading Note
+
+CoinSwitch PRO **does** support Bitcoin, Ethereum, and Solana options with USDT settlement. However, their options API endpoints are not yet fully documented publicly. The app currently:
+
+- **Simulates** the options chain using Black-Scholes pricing model
+- **Prepares** order payloads for submission once the full options API is published
+- **Calculates** real Greeks (Delta, Gamma, Theta, Vega) and IV
+
+When CoinSwitch publishes their options API documentation, the `OptionsEngine` class in `app.py` can be swapped for live API calls.
+
+---
+
+## Important Disclaimers
+
+- **Crypto products are unregulated and highly risky.** There may be no regulatory recourse for losses.
+- This tool is for **educational and personal use only**. Test with sandbox mode first.
+- Always use **Sandbox/Paper Trading** mode before risking real capital.
+- Never share your API keys or secret keys with anyone.
+- This is not financial advice. Trade at your own risk.
+
+---
+
+## Security
+
+- API keys are entered client-side and never stored permanently
+- All API communication uses HTTPS
+- Request signing uses HMAC-SHA256 (Legacy) or Ed25519 (CSX) as per CoinSwitch specs
+- Enable Sandbox mode for safe testing
+
+---
+
+## Tech Stack
+
+- **Python 3.9+**
+- **Streamlit** — UI framework
+- **Plotly** — Interactive charts
+- **Pandas** — Data manipulation
+- **Requests** — HTTP client
+- **ed25519** / **cryptography** — Request signing
+
+---
+
+*Built for CoinSwitch PRO traders in India 🇮🇳*
