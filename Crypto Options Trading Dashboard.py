@@ -640,25 +640,29 @@ class PredictionEngine:
 
 @st.cache_data(ttl=60)
 def fetch_ohlcv(symbol="bitcoin", vs="usd", days=90):
-    """Fetch OHLCV data. Always fetches in USD first, converts to INR if needed."""
+    """Fetch OHLCV data. Always fetches in USD, converts to INR if needed."""
+    df = None
     try:
-        # Always fetch in USD for consistency (CoinGecko OHLC can be unreliable with INR)
         r = requests.get(f"https://api.coingecko.com/api/v3/coins/{symbol}/ohlc",
                          params={"vs_currency":"usd","days":str(days)}, timeout=15)
-        data = r.json()
-        if not isinstance(data, list) or len(data) == 0:
-            return _synth(days)
-        df = pd.DataFrame(data, columns=["timestamp","open","high","low","close"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df["volume"] = np.random.uniform(100, 5000, len(df))
-        # Convert to INR if requested
-        if vs == "inr":
-            inr_rate = _get_usd_inr_rate()
-            for col in ["open","high","low","close"]:
-                df[col] = df[col] * inr_rate
-        return df
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data, columns=["timestamp","open","high","low","close"])
+                df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+                df["volume"] = np.random.uniform(100, 5000, len(df))
     except Exception:
-        return _synth(days)
+        pass
+    # Fallback: generate synthetic data using real spot price
+    if df is None:
+        spot_usd = _get_spot_usd(symbol)
+        df = _synth(days, spot_usd)
+    # Convert to INR if requested
+    if vs == "inr":
+        rate = _get_usd_inr_rate()
+        for col in ["open","high","low","close"]:
+            df[col] = df[col] * rate
+    return df
 
 @st.cache_data(ttl=300)
 def _get_usd_inr_rate():
@@ -671,9 +675,21 @@ def _get_usd_inr_rate():
         usd = d.get("usd", 0)
         if usd > 0 and inr > 0:
             return inr / usd
-        return 85.0  # fallback INR/USD rate
+        return 85.0
     except Exception:
         return 85.0
+
+def _get_spot_usd(symbol="bitcoin"):
+    """Get current spot price in USD for any coin."""
+    defaults = {"bitcoin": 90000, "ethereum": 3500, "solana": 150}
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price",
+                         params={"ids": symbol, "vs_currencies": "usd"}, timeout=10)
+        if r.status_code == 200:
+            return r.json().get(symbol, {}).get("usd", 0) or defaults.get(symbol, 90000)
+    except Exception:
+        pass
+    return defaults.get(symbol, 90000)
 
 def _synth(days=90, base=90000):
     np.random.seed(42)
