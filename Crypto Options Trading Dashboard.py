@@ -1042,7 +1042,7 @@ def main():
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_upper"],name="Upper",line=dict(color="#3b82f6",width=1)))
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_lower"],name="Lower",line=dict(color="#3b82f6",width=1),fill="tonexty",fillcolor="rgba(59,130,246,.06)"))
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_middle"],name="Mid",line=dict(color="#f59e0b",width=1,dash="dot")))
-            f4.update_layout(**plot_cfg,title="Bollinger(20,2)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"),height=300)
+            f4.update_layout(**{**plot_cfg,"height":300},title="Bollinger(20,2)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
             st.plotly_chart(f4,use_container_width=True)
         if "StochRSI" in ch_sel:
             f5=go.Figure()
