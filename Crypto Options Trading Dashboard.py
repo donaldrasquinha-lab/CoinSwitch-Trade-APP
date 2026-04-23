@@ -1245,7 +1245,7 @@ def main():
             """)
 
     # ═══ TAB 5: BTC MODELS ═══
-    with tabs[10]:
+    with tabs[4]:
         st.markdown("### ₿ Bitcoin-Specific Models")
 
         btc_days = st.selectbox("Data Window",[90,180,365],index=1,format_func=lambda x:f"{x} Days",key="btc_d")
@@ -1317,7 +1317,7 @@ def main():
         st.caption("These BTC-specific models use simplified proxies. The Pi Cycle indicator requires 350+ days of daily data for full accuracy; shorter windows use available data with adjusted periods.")
 
     # ═══ TAB 6: OPTIONS CHAIN ═══
-    with tabs[9]:
+    with tabs[5]:
         st.markdown("### Options Chain")
         c1,c2,c3 = st.columns(3)
         with c1: ul = st.selectbox("Underlying",["BTC","ETH","SOL"],key="oc_u")
@@ -1337,7 +1337,7 @@ def main():
             width='stretch', height=450)
 
     # ═══ TAB 7: PLACE ORDER ═══
-    with tabs[10]:
+    with tabs[6]:
         st.markdown("### Place Order")
         if not (api_key and secret_key):
             st.warning("Enter API credentials in sidebar")
@@ -1368,7 +1368,7 @@ def main():
                         st.json({"instrument":oi,"side":os_,"strike":ok,"expiry":oe,"contracts":ol,"premium":op})
 
     # ═══ TAB 8: MARKET DATA ═══
-    with tabs[9]:
+    with tabs[7]:
         st.markdown("### Market Data")
         md_i = st.selectbox("Instrument",SUPPORTED_INSTRUMENTS,key="md_i")
         if cc:
@@ -1389,7 +1389,7 @@ def main():
         else: st.caption("Connect API for live data")
 
     # ═══ TAB 9: PORTFOLIO ═══
-    with tabs[10]:
+    with tabs[8]:
         st.markdown("### Portfolio")
         if not (api_key and secret_key): st.warning("Connect API")
         elif api_mode=="CSX Exchange":
@@ -1432,7 +1432,7 @@ def main():
                 except Exception as e: st.error(str(e))
         else: st.warning("Connect API")
 
-    # ═══ TAB 11: P# ═══ TAB 9: P&L CALC ═══L CALC ═══
+    # ═══ TAB 11: P&L CALC ═══
     with tabs[10]:
         st.markdown("### P&L Calculator")
         cl1,cl2=st.columns(2)
