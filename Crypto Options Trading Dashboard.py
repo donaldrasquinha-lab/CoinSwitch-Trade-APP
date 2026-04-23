@@ -640,80 +640,134 @@ class PredictionEngine:
 
 @st.cache_data(ttl=60)
 def fetch_ohlcv(symbol="bitcoin", vs="usd", days=90):
-    """Fetch OHLCV data. Always fetches in USD, converts to INR if needed."""
-    df = None
+    """Fetch OHLCV data from CoinGecko in the requested currency. Returns None on failure."""
     try:
         r = requests.get(f"https://api.coingecko.com/api/v3/coins/{symbol}/ohlc",
-                         params={"vs_currency":"usd","days":str(days)}, timeout=15)
+                         params={"vs_currency": vs, "days": str(days)}, timeout=15)
         if r.status_code == 200:
             data = r.json()
             if isinstance(data, list) and len(data) > 0:
                 df = pd.DataFrame(data, columns=["timestamp","open","high","low","close"])
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-                df["volume"] = np.random.uniform(100, 5000, len(df))
+                # Try to get real volume
+                try:
+                    rv = requests.get(f"https://api.coingecko.com/api/v3/coins/{symbol}/market_chart",
+                                      params={"vs_currency": vs, "days": str(days)}, timeout=15)
+                    if rv.status_code == 200:
+                        vols = rv.json().get("total_volumes", [])
+                        if vols:
+                            vdf = pd.DataFrame(vols, columns=["vts","volume"])
+                            vdf["vts"] = pd.to_datetime(vdf["vts"], unit="ms")
+                            vol_arr = []
+                            for ts in df["timestamp"]:
+                                idx = (vdf["vts"] - ts).abs().idxmin()
+                                vol_arr.append(vdf.loc[idx, "volume"])
+                            df["volume"] = vol_arr
+                        else:
+                            df["volume"] = 0.0
+                    else:
+                        df["volume"] = 0.0
+                except Exception:
+                    df["volume"] = 0.0
+                return df
     except Exception:
         pass
-    # Fallback: generate synthetic data using real spot price
-    if df is None:
-        spot_usd = _get_spot_usd(symbol)
-        df = _synth(days, spot_usd)
-    # Convert to INR if requested
-    if vs == "inr":
-        rate = _get_usd_inr_rate()
-        for col in ["open","high","low","close"]:
-            df[col] = df[col] * rate
-    return df
+    return None
 
-@st.cache_data(ttl=300)
-def _get_usd_inr_rate():
-    """Get current USD/INR exchange rate."""
+
+def _fetch_price_coingecko():
+    """Source 1: CoinGecko."""
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price",
-                         params={"ids":"bitcoin","vs_currencies":"inr,usd"}, timeout=10)
-        d = r.json().get("bitcoin",{})
-        inr = d.get("inr", 0)
-        usd = d.get("usd", 0)
-        if usd > 0 and inr > 0:
-            return inr / usd
-        return 85.0
-    except Exception:
-        return 85.0
-
-def _get_spot_usd(symbol="bitcoin"):
-    """Get current spot price in USD for any coin."""
-    defaults = {"bitcoin": 90000, "ethereum": 3500, "solana": 150}
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price",
-                         params={"ids": symbol, "vs_currencies": "usd"}, timeout=10)
+                         params={"ids": "bitcoin", "vs_currencies": "inr,usd"}, timeout=8)
         if r.status_code == 200:
-            return r.json().get(symbol, {}).get("usd", 0) or defaults.get(symbol, 90000)
+            d = r.json().get("bitcoin", {})
+            inr, usd = d.get("inr", 0), d.get("usd", 0)
+            if inr > 0 and usd > 0:
+                return inr, usd
     except Exception:
         pass
-    return defaults.get(symbol, 90000)
+    return None
 
-def _synth(days=90, base=90000):
-    np.random.seed(42)
-    n = days * 6
-    ts = [datetime.now()-timedelta(hours=4*(n-i)) for i in range(n)]
-    ret = np.random.normal(0.001, 0.025, n)
-    c = base * np.cumprod(1+ret)
-    h = c*(1+np.abs(np.random.normal(0,0.008,n)))
-    l = c*(1-np.abs(np.random.normal(0,0.008,n)))
-    o = np.roll(c,1); o[0]=base
-    v = np.random.uniform(200,8000,n)
-    return pd.DataFrame({"timestamp":ts,"open":o,"high":h,"low":l,"close":c,"volume":v})
+def _fetch_price_binance():
+    """Source 2: Binance — BTC/USDT spot price, derive INR from USD/INR rate."""
+    try:
+        r = requests.get("https://api.binance.com/api/v3/ticker/price",
+                         params={"symbol": "BTCUSDT"}, timeout=8)
+        if r.status_code == 200:
+            usd = float(r.json().get("price", 0))
+            if usd > 0:
+                inr_rate = _fetch_usd_inr_rate()
+                return usd * inr_rate, usd
+    except Exception:
+        pass
+    return None
 
-@st.cache_data(ttl=30)
-def fetch_btc_price_inr():
+def _fetch_price_coincap():
+    """Source 3: CoinCap."""
+    try:
+        r = requests.get("https://api.coincap.io/v2/assets/bitcoin", timeout=8)
+        if r.status_code == 200:
+            usd = float(r.json().get("data", {}).get("priceUsd", 0))
+            if usd > 0:
+                inr_rate = _fetch_usd_inr_rate()
+                return usd * inr_rate, usd
+    except Exception:
+        pass
+    return None
+
+def _fetch_price_kraken():
+    """Source 4: Kraken."""
+    try:
+        r = requests.get("https://api.kraken.com/0/public/Ticker",
+                         params={"pair": "XBTUSD"}, timeout=8)
+        if r.status_code == 200:
+            data = r.json().get("result", {})
+            for key in data:
+                usd = float(data[key].get("c", [0])[0])
+                if usd > 0:
+                    inr_rate = _fetch_usd_inr_rate()
+                    return usd * inr_rate, usd
+    except Exception:
+        pass
+    return None
+
+def _fetch_usd_inr_rate():
+    """Get USD/INR rate from multiple sources."""
+    # Try ExchangeRate API
+    try:
+        r = requests.get("https://open.er-api.com/v6/latest/USD", timeout=8)
+        if r.status_code == 200:
+            rate = r.json().get("rates", {}).get("INR", 0)
+            if rate > 0:
+                return rate
+    except Exception:
+        pass
+    # Try deriving from CoinGecko BTC prices
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price",
-                         params={"ids":"bitcoin","vs_currencies":"inr,usd"}, timeout=10)
-        d = r.json()
-        inr = d.get("bitcoin",{}).get("inr",0) or 7500000
-        usd = d.get("bitcoin",{}).get("usd",0) or 90000
-        return inr, usd
+                         params={"ids": "tether", "vs_currencies": "inr"}, timeout=8)
+        if r.status_code == 200:
+            rate = r.json().get("tether", {}).get("inr", 0)
+            if rate > 0:
+                return rate
     except Exception:
-        return 7500000, 90000
+        pass
+    return 0  # All rate APIs failed — cannot convert
+
+@st.cache_data(ttl=15)
+def fetch_btc_price_inr():
+    """
+    Fetch live BTC price using multi-source fallback chain.
+    Tries: CoinGecko -> Binance -> CoinCap -> Kraken
+    Returns (inr, usd) tuple or None if ALL sources fail.
+    """
+    for source_fn in [_fetch_price_coingecko, _fetch_price_binance,
+                      _fetch_price_coincap, _fetch_price_kraken]:
+        result = source_fn()
+        if result:
+            return result
+    return None
 
 
 # =============================================
@@ -901,16 +955,23 @@ def main():
 
     lc = CoinSwitchLegacyClient(api_key, secret_key) if api_key and secret_key else None
     cc = CSXClient(api_key, secret_key, sandbox=use_sandbox) if api_key and secret_key else None
-    btc_inr, btc_usd = fetch_btc_price_inr()
+    btc_data = fetch_btc_price_inr()
+    if btc_data:
+        btc_inr, btc_usd = btc_data
+    else:
+        btc_inr, btc_usd = 0, 0
 
-    # Top metrics
-    for i, (lbl, val, cls) in enumerate(zip(
-        ["BTC/INR","BTC/USD","24h Vol","IV (BTC)","Market"],
-        [f"₹{btc_inr:,.0f}",f"${btc_usd:,.0f}",f"₹{btc_inr*.012:,.0f}Cr","65.0%","24x7 LIVE"],
-        ["go","g","","cy","pu"])):
-        if i == 0: cols = st.columns(5)
-        with cols[i]:
-            st.markdown(f'<div class="mc"><div class="ml">{lbl}</div><div class="mv {cls}">{val}</div></div>', unsafe_allow_html=True)
+    # ── Top metrics ──
+    if btc_usd > 0:
+        for i, (lbl, val, cls) in enumerate(zip(
+            ["BTC/INR","BTC/USD","24h Vol","IV (BTC)","Market"],
+            [f"₹{btc_inr:,.0f}",f"${btc_usd:,.0f}",f"₹{btc_inr*.012:,.0f}Cr","65.0%","24x7 LIVE"],
+            ["go","g","","cy","pu"])):
+            if i == 0: cols = st.columns(5)
+            with cols[i]:
+                st.markdown(f'<div class="mc"><div class="ml">{lbl}</div><div class="mv {cls}">{val}</div></div>', unsafe_allow_html=True)
+    else:
+        st.warning("⚠️ Could not fetch live BTC price. All price APIs (CoinGecko, Binance, CoinCap, Kraken) are unreachable. Data will auto-retry on next refresh.")
 
     coin_map = {"BTC":"bitcoin","ETH":"ethereum","SOL":"solana"}
 
@@ -926,6 +987,9 @@ def main():
         with c3: pa_ccy = st.selectbox("Quote",["usd","inr"],key="pa_q")
 
         df = fetch_ohlcv(coin_map[pa_coin], pa_ccy, pa_days)
+        if df is None:
+            st.error(f"Could not fetch {pa_coin} data from CoinGecko API (rate limited). Please try again in a minute.")
+            st.stop()
         ta = TechnicalAnalysis
         cl = df["close"].values.astype(float)
         hi = df["high"].values.astype(float)
@@ -971,6 +1035,9 @@ def main():
         with a3: adx_per = st.slider("Period",7,28,14,key="ax_p")
 
         dfa = fetch_ohlcv(coin_map[adx_coin],"usd",adx_days)
+        if dfa is None:
+            st.error("Could not fetch data from CoinGecko API. Please try again in a minute.")
+            st.stop()
         av,pv,mv = TechnicalAnalysis.adx(dfa["high"].values,dfa["low"].values,dfa["close"].values,adx_per)
 
         fig2 = make_subplots(rows=2,cols=1,shared_xaxes=True,vertical_spacing=.08,row_heights=[.5,.5],
@@ -1016,6 +1083,9 @@ def main():
             if st.button("Run Analysis",type="primary",width='stretch'): st.cache_data.clear()
 
         dfp = fetch_ohlcv(coin_map[pr_coin],"usd",pr_days)
+        if dfp is None:
+            st.error("Could not fetch data from CoinGecko API. Please try again in a minute.")
+            st.stop()
         res = PredictionEngine.analyze(dfp)
         pred,conf,color = res["prediction"],res["confidence"],res["color"]
 
@@ -1130,6 +1200,9 @@ def main():
             if st.button("Refresh",type="primary",key="adv_ref",width='stretch'): st.cache_data.clear()
 
         dfa = fetch_ohlcv(coin_map[adv_coin],"usd",adv_days)
+        if dfa is None:
+            st.error("Could not fetch data from CoinGecko API. Please try again in a minute.")
+            st.stop()
         ta = TechnicalAnalysis
         cl_a = dfa["close"].values.astype(float)
         hi_a = dfa["high"].values.astype(float)
@@ -1361,7 +1434,19 @@ def main():
         with c1: ul = st.selectbox("Underlying",["BTC","ETH","SOL"],key="oc_u")
         with c2: ed = st.selectbox("Expiry",[1,3,7,14,30],index=2,format_func=lambda x:f"{x}D",key="oc_e")
         with c3:
-            sp = btc_usd if ul=="BTC" else (3500 if ul=="ETH" else 150)
+            if ul == "BTC":
+                sp = btc_usd
+            else:
+                try:
+                    coin_id = "ethereum" if ul == "ETH" else "solana"
+                    _r = requests.get("https://api.coingecko.com/api/v3/simple/price",
+                                      params={"ids": coin_id, "vs_currencies": "usd"}, timeout=8)
+                    sp = _r.json().get(coin_id, {}).get("usd", 0) if _r.status_code == 200 else 0
+                except Exception:
+                    sp = 0
+            if sp <= 0:
+                st.warning(f"Could not fetch live {ul} price. Options chain unavailable.")
+                st.stop()
             st.metric("Spot",f"${sp:,.2f}")
         ch = OptionsEngine.generate_options_chain(sp, ed)
         ddf = pd.DataFrame(ch)[["Call Moneyness","Call Price","Call Delta","Call Theta","Strike","IV%","Gamma","Vega","Put Price","Put Delta","Put Theta","Put Moneyness"]]
