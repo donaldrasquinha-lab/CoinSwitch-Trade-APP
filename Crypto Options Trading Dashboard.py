@@ -640,18 +640,40 @@ class PredictionEngine:
 
 @st.cache_data(ttl=60)
 def fetch_ohlcv(symbol="bitcoin", vs="usd", days=90):
+    """Fetch OHLCV data. Always fetches in USD first, converts to INR if needed."""
     try:
+        # Always fetch in USD for consistency (CoinGecko OHLC can be unreliable with INR)
         r = requests.get(f"https://api.coingecko.com/api/v3/coins/{symbol}/ohlc",
-                         params={"vs_currency":vs,"days":str(days)}, timeout=15)
+                         params={"vs_currency":"usd","days":str(days)}, timeout=15)
         data = r.json()
         if not isinstance(data, list) or len(data) == 0:
             return _synth(days)
         df = pd.DataFrame(data, columns=["timestamp","open","high","low","close"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df["volume"] = np.random.uniform(100, 5000, len(df))
+        # Convert to INR if requested
+        if vs == "inr":
+            inr_rate = _get_usd_inr_rate()
+            for col in ["open","high","low","close"]:
+                df[col] = df[col] * inr_rate
         return df
     except Exception:
         return _synth(days)
+
+@st.cache_data(ttl=300)
+def _get_usd_inr_rate():
+    """Get current USD/INR exchange rate."""
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price",
+                         params={"ids":"bitcoin","vs_currencies":"inr,usd"}, timeout=10)
+        d = r.json().get("bitcoin",{})
+        inr = d.get("inr", 0)
+        usd = d.get("usd", 0)
+        if usd > 0 and inr > 0:
+            return inr / usd
+        return 85.0  # fallback INR/USD rate
+    except Exception:
+        return 85.0
 
 def _synth(days=90, base=90000):
     np.random.seed(42)
@@ -1373,78 +1395,104 @@ def main():
     with tabs[7]:
         st.markdown("### Market Data")
         md_i = st.selectbox("Instrument",SUPPORTED_INSTRUMENTS,key="md_i")
+        md_live = False
         if cc:
             try:
                 r=cc.get_depth(md_i,15)
                 if r.status_code==200:
                     d=r.json().get("data",{})
-                    b1,b2=st.columns(2)
-                    with b1:
-                        st.markdown("**🟢 Bids**")
-                        buys=d.get("buy",[])
-                        if buys: st.dataframe(pd.DataFrame(buys if isinstance(buys[0],dict) else [{"price":x[0],"qty":x[1]} for x in buys]),width='stretch',height=300)
-                        else: st.caption("No bids available")
-                    with b2:
-                        st.markdown("**🔴 Asks**")
-                        sells=d.get("sell",[])
-                        if sells: st.dataframe(pd.DataFrame(sells if isinstance(sells[0],dict) else [{"price":x[0],"qty":x[1]} for x in sells]),width='stretch',height=300)
-                        else: st.caption("No asks available")
-                else:
-                    st.warning(f"API returned status {r.status_code}")
-            except Exception as e: st.info(f"Could not fetch order book: {e}")
-        else:
-            st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to see live order book data.")
-            st.markdown("##### Simulated Order Book (Demo)")
-            b1,b2=st.columns(2)
+                    buys=d.get("buy",[])
+                    sells=d.get("sell",[])
+                    if buys or sells:
+                        md_live = True
+                        b1,b2=st.columns(2)
+                        with b1:
+                            st.markdown("**🟢 Bids**")
+                            if buys:
+                                st.dataframe(pd.DataFrame(buys if isinstance(buys[0],dict) else [{"Price":x[0],"Qty":x[1]} for x in buys]),width='stretch',height=350)
+                            else:
+                                st.caption("No bids")
+                        with b2:
+                            st.markdown("**🔴 Asks**")
+                            if sells:
+                                st.dataframe(pd.DataFrame(sells if isinstance(sells[0],dict) else [{"Price":x[0],"Qty":x[1]} for x in sells]),width='stretch',height=350)
+                            else:
+                                st.caption("No asks")
+            except Exception:
+                pass
+        if not md_live:
+            if cc:
+                st.warning("Could not fetch live data from CoinSwitch API (403/timeout). Showing simulated order book.")
+            else:
+                st.info("🔐 Connect API keys in the sidebar for live data. Showing simulated order book.")
             base_price = btc_inr if "INR" in md_i else btc_usd
+            sym = "₹" if "INR" in md_i else "$"
+            b1,b2=st.columns(2)
             with b1:
-                st.markdown("**🟢 Bids**")
-                sim_bids = [{"Price":f"{base_price - i*base_price*0.001:.2f}","Quantity":f"{0.001+i*0.0005:.5f}"} for i in range(10)]
-                st.dataframe(pd.DataFrame(sim_bids),width='stretch',height=350)
+                st.markdown("**🟢 Bids (Simulated)**")
+                sim_bids = [{"Price":f"{sym}{base_price - i*base_price*0.001:,.2f}",
+                             "Quantity":f"{0.001+i*0.0005:.5f}",
+                             "Total":f"{sym}{(base_price - i*base_price*0.001)*(0.001+i*0.0005):,.2f}"}
+                            for i in range(12)]
+                st.dataframe(pd.DataFrame(sim_bids),width='stretch',height=420)
             with b2:
-                st.markdown("**🔴 Asks**")
-                sim_asks = [{"Price":f"{base_price + i*base_price*0.001:.2f}","Quantity":f"{0.001+i*0.0003:.5f}"} for i in range(10)]
-                st.dataframe(pd.DataFrame(sim_asks),width='stretch',height=350)
+                st.markdown("**🔴 Asks (Simulated)**")
+                sim_asks = [{"Price":f"{sym}{base_price + i*base_price*0.001:,.2f}",
+                             "Quantity":f"{0.001+i*0.0003:.5f}",
+                             "Total":f"{sym}{(base_price + i*base_price*0.001)*(0.001+i*0.0003):,.2f}"}
+                            for i in range(12)]
+                st.dataframe(pd.DataFrame(sim_asks),width='stretch',height=420)
+            st.markdown(f"""
+            <div class="mc">
+                <div class="ml">Spread (Simulated)</div>
+                <div class="mv go">{sym}{base_price*0.002:,.2f} ({0.2:.1f}%)</div>
+            </div>""", unsafe_allow_html=True)
 
     # ═══ TAB 9: PORTFOLIO ═══
     with tabs[8]:
         st.markdown("### Portfolio & Balances")
-        if not (api_key and secret_key):
-            st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to view your portfolio.")
-            st.markdown("##### Demo Portfolio")
-            demo_data = [
-                {"Asset":"BTC","Available":0.05420,"Locked":0.00000,"Value (USD)":f"${0.0542*btc_usd:,.2f}"},
-                {"Asset":"ETH","Available":2.35000,"Locked":0.50000,"Value (USD)":f"${2.35*3500:,.2f}"},
-                {"Asset":"USDT","Available":5000.00,"Locked":1200.00,"Value (USD)":"$5,000.00"},
-                {"Asset":"SOL","Available":15.00000,"Locked":0.00000,"Value (USD)":f"${15*150:,.2f}"},
-                {"Asset":"INR","Available":125000.00,"Locked":25000.00,"Value (USD)":f"${125000/85:,.2f}"},
-            ]
-            st.dataframe(pd.DataFrame(demo_data),width='stretch')
-            st.caption("This is simulated data. Connect API to see your real balances.")
-        else:
+        demo_data = [
+            {"Asset":"BTC","Available":"0.05420","Locked":"0.00000","Est. Value":f"${0.0542*btc_usd:,.2f}"},
+            {"Asset":"ETH","Available":"2.35000","Locked":"0.50000","Est. Value":f"${2.35*3500:,.2f}"},
+            {"Asset":"USDT","Available":"5,000.00","Locked":"1,200.00","Est. Value":"$5,000.00"},
+            {"Asset":"SOL","Available":"15.00000","Locked":"0.00000","Est. Value":f"${15*150:,.2f}"},
+            {"Asset":"INR","Available":"1,25,000.00","Locked":"25,000.00","Est. Value":f"${125000/85:,.2f}"},
+        ]
+        port_loaded = False
+        if api_key and secret_key:
             if st.button("🔄 Refresh Portfolio",key="ref_port"):
                 st.cache_data.clear()
-            if api_mode=="CSX Exchange":
-                try:
-                    r=cc.get_balance()
-                    if r.status_code==200:
-                        bd=r.json().get("data",{}); av=bd.get("Available",{}); lk=bd.get("Locked",{})
+            try:
+                if api_mode == "CSX Exchange":
+                    r = cc.get_balance()
+                else:
+                    r = lc.get_portfolio()
+                if r.status_code == 200:
+                    if api_mode == "CSX Exchange":
+                        bd = r.json().get("data", {})
+                        av = bd.get("Available", {})
+                        lk = bd.get("Locked", {})
                         if av:
                             bdf = pd.DataFrame([{"Asset":a.upper(),"Available":float(q),"Locked":float(lk.get(a,0))} for a,q in av.items()])
-                            st.dataframe(bdf,width='stretch')
-                        else:
-                            st.info("No balances found in your account.")
+                            st.dataframe(bdf, width='stretch')
+                            port_loaded = True
                     else:
-                        st.error(f"API Error: {r.status_code}")
-                except Exception as e: st.error(f"Connection error: {e}")
-            else:
-                try:
-                    r=lc.get_portfolio()
-                    if r.status_code==200:
-                        st.json(r.json())
-                    else:
-                        st.error(f"API Error: {r.status_code}")
-                except Exception as e: st.error(f"Connection error: {e}")
+                        data = r.json()
+                        if data:
+                            st.json(data)
+                            port_loaded = True
+            except Exception:
+                pass
+            if not port_loaded:
+                st.warning("Could not fetch portfolio from CoinSwitch API. Showing demo data below.")
+        if not port_loaded:
+            if not (api_key and secret_key):
+                st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to view your real portfolio.")
+            st.markdown("##### Demo Portfolio")
+            st.dataframe(pd.DataFrame(demo_data), width='stretch')
+            total_val = 0.0542*btc_usd + 2.35*3500 + 5000 + 15*150 + 125000/85
+            st.markdown(f'<div class="mc"><div class="ml">Total Portfolio Value (Demo)</div><div class="mv g">${total_val:,.2f}</div></div>', unsafe_allow_html=True)
+            st.caption("Simulated data. Connect API to see your real balances.")
 
     # ═══ TAB 10: ORDERS ═══
     with tabs[9]:
