@@ -900,7 +900,7 @@ def main():
                           margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
                           xaxis_rangeslider_visible=False,legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
         fig.update_xaxes(gridcolor="#1e293b"); fig.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         sym = "₹" if pa_ccy=="inr" else "$"
         chg = ((cl[-1]-cl[0])/cl[0])*100
@@ -935,7 +935,7 @@ def main():
                            margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11),
                            xaxis_rangeslider_visible=False,legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
         fig2.update_xaxes(gridcolor="#1e293b"); fig2.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
         la = av[~np.isnan(av)][-1] if np.any(~np.isnan(av)) else 0
         lp = pv[~np.isnan(pv)][-1] if np.any(~np.isnan(pv)) else 0
@@ -961,7 +961,7 @@ def main():
         with p1: pr_coin = st.selectbox("Asset",["BTC","ETH","SOL"],key="pr_c")
         with p2: pr_days = st.selectbox("Window",[30,60,90,180],index=2,format_func=lambda x:f"{x}D",key="pr_d")
         with p3:
-            if st.button("Run Analysis",type="primary",use_container_width=True): st.cache_data.clear()
+            if st.button("Run Analysis",type="primary",width='stretch'): st.cache_data.clear()
 
         dfp = fetch_ohlcv(coin_map[pr_coin],"usd",pr_days)
         res = PredictionEngine.analyze(dfp)
@@ -984,7 +984,7 @@ def main():
                             {"range":[30,100],"color":"rgba(0,255,136,.15)"}],
                    "threshold":{"line":{"color":"#fff","width":3},"thickness":.8,"value":conf}}))
         fg.update_layout(paper_bgcolor="#0a0e17",font=dict(color="#e2e8f0",family="JetBrains Mono"),height=250,margin=dict(l=30,r=30,t=30,b=10))
-        st.plotly_chart(fg, use_container_width=True)
+        st.plotly_chart(fg, width='stretch')
 
         # Breakdown
         st.markdown("##### Indicator Breakdown")
@@ -1020,7 +1020,7 @@ def main():
             f1.add_hline(y=70,line_dash="dash",line_color="#ff3366"); f1.add_hline(y=30,line_dash="dash",line_color="#00ff88")
             f1.add_hrect(y0=30,y1=70,fillcolor="rgba(245,158,11,.04)",line_width=0)
             f1.update_layout(**plot_cfg,title="RSI(14)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f1,use_container_width=True)
+            st.plotly_chart(f1,width='stretch')
         if "MACD" in ch_sel:
             f2=go.Figure()
             f2.add_trace(go.Scatter(x=dfp["timestamp"],y=res["macd_line"],name="MACD",line=dict(color="#3b82f6",width=2)))
@@ -1028,14 +1028,14 @@ def main():
             hc=["#00ff88" if h>=0 else "#ff3366" for h in res["macd_hist"]]
             f2.add_trace(go.Bar(x=dfp["timestamp"],y=res["macd_hist"],name="Hist",marker_color=hc,opacity=.5))
             f2.update_layout(**plot_cfg,title="MACD(12/26/9)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f2,use_container_width=True)
+            st.plotly_chart(f2,width='stretch')
         if "Stochastic" in ch_sel:
             f3=go.Figure()
             f3.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_k"],name="%K",line=dict(color="#06b6d4",width=2)))
             f3.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_d"],name="%D",line=dict(color="#f59e0b",width=1.5,dash="dot")))
             f3.add_hline(y=80,line_dash="dash",line_color="#ff3366"); f3.add_hline(y=20,line_dash="dash",line_color="#00ff88")
             f3.update_layout(**plot_cfg,title="Stochastic(14,3)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f3,use_container_width=True)
+            st.plotly_chart(f3,width='stretch')
         if "Bollinger Bands" in ch_sel:
             f4=go.Figure()
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=dfp["close"],name="Price",line=dict(color="#e2e8f0",width=2)))
@@ -1043,7 +1043,7 @@ def main():
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_lower"],name="Lower",line=dict(color="#3b82f6",width=1),fill="tonexty",fillcolor="rgba(59,130,246,.06)"))
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_middle"],name="Mid",line=dict(color="#f59e0b",width=1,dash="dot")))
             f4.update_layout(**{**plot_cfg,"height":300},title="Bollinger(20,2)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f4,use_container_width=True)
+            st.plotly_chart(f4,width='stretch')
         if "StochRSI" in ch_sel:
             f5=go.Figure()
             f5.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_rsi_k"],name="StochRSI %K",line=dict(color="#06b6d4",width=2)))
@@ -1051,20 +1051,20 @@ def main():
             f5.add_hline(y=80,line_dash="dash",line_color="#ff3366"); f5.add_hline(y=20,line_dash="dash",line_color="#00ff88")
             f5.add_hrect(y0=20,y1=80,fillcolor="rgba(245,158,11,.03)",line_width=0)
             f5.update_layout(**plot_cfg,title="Stochastic RSI (14,14,3,3)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f5,use_container_width=True)
+            st.plotly_chart(f5,width='stretch')
         if "OBV" in ch_sel:
             f6=go.Figure()
             f6.add_trace(go.Scatter(x=dfp["timestamp"],y=res["obv"],name="OBV",line=dict(color="#a855f7",width=2)))
             f6.add_trace(go.Scatter(x=dfp["timestamp"],y=res["obv_ema"],name="OBV EMA(20)",line=dict(color="#f59e0b",width=1.5,dash="dot")))
             f6.update_layout(**plot_cfg,title="On-Balance Volume",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f6,use_container_width=True)
+            st.plotly_chart(f6,width='stretch')
         if "TSI" in ch_sel:
             f7=go.Figure()
             f7.add_trace(go.Scatter(x=dfp["timestamp"],y=res["tsi"],name="TSI",line=dict(color="#3b82f6",width=2)))
             f7.add_trace(go.Scatter(x=dfp["timestamp"],y=res["tsi_signal"],name="Signal",line=dict(color="#ff3366",width=1.5,dash="dot")))
             f7.add_hline(y=0,line_dash="dash",line_color="#475569")
             f7.update_layout(**plot_cfg,title="True Strength Index (25/13/7)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f7,use_container_width=True)
+            st.plotly_chart(f7,width='stretch')
 
         st.caption("Predictions are technical-indicator based only. NOT financial advice. Crypto is volatile and unregulated.")
 
@@ -1075,7 +1075,7 @@ def main():
         with ax1: adv_coin = st.selectbox("Asset",["BTC","ETH","SOL"],key="adv_c")
         with ax2: adv_days = st.selectbox("Window",[30,60,90,180],index=2,format_func=lambda x:f"{x}D",key="adv_d")
         with ax3:
-            if st.button("Refresh",type="primary",key="adv_ref",use_container_width=True): st.cache_data.clear()
+            if st.button("Refresh",type="primary",key="adv_ref",width='stretch'): st.cache_data.clear()
 
         dfa = fetch_ohlcv(coin_map[adv_coin],"usd",adv_days)
         ta = TechnicalAnalysis
@@ -1104,7 +1104,7 @@ def main():
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11),
                                   xaxis_rangeslider_visible=False)
             fig_sr.update_xaxes(gridcolor="#1e293b"); fig_sr.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_sr,use_container_width=True)
+            st.plotly_chart(fig_sr,width='stretch')
             srk_now = srk[~np.isnan(srk)][-1] if np.any(~np.isnan(srk)) else 50
             srd_now = srd[~np.isnan(srd)][-1] if np.any(~np.isnan(srd)) else 50
             zone = "OVERSOLD" if srk_now<20 else ("OVERBOUGHT" if srk_now>80 else "NEUTRAL")
@@ -1125,7 +1125,7 @@ def main():
             fig_ob.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
             fig_ob.update_xaxes(gridcolor="#1e293b"); fig_ob.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_ob,use_container_width=True)
+            st.plotly_chart(fig_ob,width='stretch')
 
         if "TSI" in adv_sel:
             tsi_v, tsi_s = ta.tsi(cl_a)
@@ -1140,7 +1140,7 @@ def main():
             fig_ts.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
             fig_ts.update_xaxes(gridcolor="#1e293b"); fig_ts.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_ts,use_container_width=True)
+            st.plotly_chart(fig_ts,width='stretch')
             tn = tsi_v[~np.isnan(tsi_v)][-1] if np.any(~np.isnan(tsi_v)) else 0
             ts_n = tsi_s[~np.isnan(tsi_s)][-1] if np.any(~np.isnan(tsi_s)) else 0
             tc1,tc2 = st.columns(2)
@@ -1171,7 +1171,7 @@ def main():
                                   margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
                                   xaxis_rangeslider_visible=False,title="Pivot Trend (Higher Highs/Lows Detection)")
             fig_pv.update_xaxes(gridcolor="#1e293b"); fig_pv.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_pv,use_container_width=True)
+            st.plotly_chart(fig_pv,width='stretch')
             pvn = pvt[-1]
             st.markdown(f'<div class="mc"><div class="ml">Pivot Trend</div><div class="mv {"g" if pvn>0 else ("r" if pvn<0 else "go")}">{"UPTREND (HH+HL)" if pvn>0 else ("DOWNTREND (LH+LL)" if pvn<0 else "NEUTRAL")}</div></div>',unsafe_allow_html=True)
 
@@ -1208,7 +1208,7 @@ def main():
             fig_dv.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=600,
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
             fig_dv.update_xaxes(gridcolor="#1e293b"); fig_dv.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_dv,use_container_width=True)
+            st.plotly_chart(fig_dv,width='stretch')
             recent_r = rdiv[-10:]
             recent_t = tdiv[-10:]
             has_bull = np.any(recent_r>0) or np.any(recent_t>0)
@@ -1259,7 +1259,7 @@ def main():
                               legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1),
                               yaxis_type="log",yaxis_title="BTC Price (log scale)")
         fig_pi.update_xaxes(gridcolor="#1e293b"); fig_pi.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig_pi,use_container_width=True)
+        st.plotly_chart(fig_pi,width='stretch')
 
         # Status cards
         pi111_now = pi_111[~np.isnan(pi_111)][-1] if np.any(~np.isnan(pi_111)) else 0
@@ -1291,7 +1291,7 @@ def main():
                               margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
                               yaxis_title="Ratio")
         fig_mv.update_xaxes(gridcolor="#1e293b"); fig_mv.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig_mv,use_container_width=True)
+        st.plotly_chart(fig_mv,width='stretch')
 
         mv_now = mvrv_proxy[~np.isnan(mvrv_proxy)][-1] if np.any(~np.isnan(mvrv_proxy)) else 1
         if mv_now < 0.7: mv_status,mv_cls = "UNDERVALUED — Accumulation Zone","g"
@@ -1320,7 +1320,7 @@ def main():
             return s
         st.dataframe(ddf.style.apply(hl,axis=1).format({"Call Price":"${:.2f}","Put Price":"${:.2f}","Strike":"${:,.0f}",
             "Call Delta":"{:.3f}","Put Delta":"{:.3f}","Call Theta":"{:.2f}","Put Theta":"{:.2f}","Gamma":"{:.5f}","Vega":"{:.2f}","IV%":"{:.1f}%"}),
-            use_container_width=True, height=450)
+            width='stretch', height=450)
 
     # ═══ TAB 7: PLACE ORDER ═══
     with tabs[10]:
@@ -1335,7 +1335,7 @@ def main():
                     si=st.selectbox("Instrument",SUPPORTED_INSTRUMENTS,key="s_i"); ss=st.radio("Side",["BUY","SELL"],horizontal=True,key="s_s")
                     st2=st.selectbox("Type",["LIMIT","MARKET"],key="s_t"); sq=st.number_input("Qty",min_value=.00001,value=.0001,step=.00001,format="%.5f",key="s_q")
                     sp2=st.number_input("Price",value=float(btc_inr),step=1000.0,key="s_p",disabled=st2=="MARKET")
-                    if st.button(f"{'🟢' if ss=='BUY' else '🔴'} {ss} {si}",use_container_width=True,type="primary"):
+                    if st.button(f"{'🟢' if ss=='BUY' else '🔴'} {ss} {si}",width='stretch',type="primary"):
                         with st.spinner("Placing..."):
                             try:
                                 r=lc.create_order(ss.lower(),si,st2.lower(),sp2,sq,default_exchange) if api_mode=="CoinSwitch Legacy" else cc.place_order(ss,si,st2,sq,sp2 if st2=="LIMIT" else None)
@@ -1349,7 +1349,7 @@ def main():
                     ok=st.number_input("Strike(USDT)",value=float(btc_usd),step=500.0,key="o_k")
                     oe=st.selectbox("Expiry",["Daily","Weekly","Bi-Weekly","Monthly"],key="o_e")
                     ol=st.number_input("Contracts",min_value=1,value=1,key="o_l"); op=st.number_input("Premium",min_value=.01,value=500.0,step=10.0,key="o_p")
-                    if st.button(f"{'🟢' if os_=='BUY' else '🔴'} {os_} {oi}",use_container_width=True,key="o_btn"):
+                    if st.button(f"{'🟢' if os_=='BUY' else '🔴'} {os_} {oi}",width='stretch',key="o_btn"):
                         st.info("Order prepared for CoinSwitch PRO Options")
                         st.json({"instrument":oi,"side":os_,"strike":ok,"expiry":oe,"contracts":ol,"premium":op})
 
@@ -1366,11 +1366,11 @@ def main():
                     with b1:
                         st.markdown("**Bids**")
                         buys=d.get("buy",[])
-                        if buys: st.dataframe(pd.DataFrame(buys if isinstance(buys[0],dict) else [{"price":x[0],"qty":x[1]} for x in buys]),use_container_width=True,height=300)
+                        if buys: st.dataframe(pd.DataFrame(buys if isinstance(buys[0],dict) else [{"price":x[0],"qty":x[1]} for x in buys]),width='stretch',height=300)
                     with b2:
                         st.markdown("**Asks**")
                         sells=d.get("sell",[])
-                        if sells: st.dataframe(pd.DataFrame(sells if isinstance(sells[0],dict) else [{"price":x[0],"qty":x[1]} for x in sells]),use_container_width=True,height=300)
+                        if sells: st.dataframe(pd.DataFrame(sells if isinstance(sells[0],dict) else [{"price":x[0],"qty":x[1]} for x in sells]),width='stretch',height=300)
             except: st.info("Could not fetch")
         else: st.caption("Connect API for live data")
 
@@ -1383,7 +1383,7 @@ def main():
                 r=cc.get_balance()
                 if r.status_code==200:
                     bd=r.json().get("data",{}); av=bd.get("Available",{}); lk=bd.get("Locked",{})
-                    if av: st.dataframe(pd.DataFrame([{"Asset":a.upper(),"Available":float(q),"Locked":float(lk.get(a,0))} for a,q in av.items()]),use_container_width=True)
+                    if av: st.dataframe(pd.DataFrame([{"Asset":a.upper(),"Available":float(q),"Locked":float(lk.get(a,0))} for a,q in av.items()]),width='stretch')
             except Exception as e: st.error(str(e))
 
     # ═══ TAB 10: ORDERS ═══
@@ -1397,7 +1397,7 @@ def main():
                     r=cc.get_orders(only_open=True) if api_mode=="CSX Exchange" else lc.get_open_orders()
                     if r.status_code==200:
                         od=r.json().get("data",[]); od=od.get("orders",od) if isinstance(od,dict) else od
-                        if od: st.dataframe(pd.DataFrame(od if isinstance(od,list) else [od]),use_container_width=True)
+                        if od: st.dataframe(pd.DataFrame(od if isinstance(od,list) else [od]),width='stretch')
                         else: st.caption("None")
                 except Exception as e: st.caption(str(e))
             with oc2:
@@ -1406,7 +1406,7 @@ def main():
                     r=cc.get_orders(only_open=False) if api_mode=="CSX Exchange" else lc.get_closed_orders()
                     if r.status_code==200:
                         od=r.json().get("data",[]); od=od.get("orders",od) if isinstance(od,dict) else od
-                        if od: st.dataframe(pd.DataFrame(od if isinstance(od,list) else [od]),use_container_width=True)
+                        if od: st.dataframe(pd.DataFrame(od if isinstance(od,list) else [od]),width='stretch')
                         else: st.caption("None")
                 except Exception as e: st.caption(str(e))
             cid=st.text_input("Cancel ID",key="cid")
