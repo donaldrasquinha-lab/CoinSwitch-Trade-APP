@@ -211,6 +211,196 @@ class TechnicalAnalysis:
         return ts, ks, sa, sb, chikou
 
     @staticmethod
+    def stoch_rsi(close, rsi_period=14, stoch_period=14, k_smooth=3, d_smooth=3):
+        """Stochastic RSI: applies Stochastic formula on RSI values."""
+        ta = TechnicalAnalysis
+        rsi_vals = ta.rsi(close, rsi_period)
+        n = len(close)
+        k = np.full(n, np.nan, dtype=float)
+        for i in range(stoch_period - 1, n):
+            window = rsi_vals[i - stoch_period + 1 : i + 1]
+            valid = window[~np.isnan(window)]
+            if len(valid) >= 2:
+                hi = np.max(valid)
+                lo = np.min(valid)
+                if hi != lo:
+                    k[i] = ((rsi_vals[i] - lo) / (hi - lo)) * 100
+                else:
+                    k[i] = 50.0
+        # Smooth K and D
+        stoch_k = ta.sma(k, k_smooth)
+        stoch_d = ta.sma(stoch_k, d_smooth)
+        return stoch_k, stoch_d
+
+    @staticmethod
+    def obv(close, volume):
+        """On-Balance Volume: cumulative volume based on price direction."""
+        n = len(close)
+        obv_arr = np.zeros(n, dtype=float)
+        obv_arr[0] = volume[0]
+        for i in range(1, n):
+            if close[i] > close[i-1]:
+                obv_arr[i] = obv_arr[i-1] + volume[i]
+            elif close[i] < close[i-1]:
+                obv_arr[i] = obv_arr[i-1] - volume[i]
+            else:
+                obv_arr[i] = obv_arr[i-1]
+        return obv_arr
+
+    @staticmethod
+    def tsi(close, long_period=25, short_period=13, signal_period=7):
+        """True Strength Index: double-smoothed momentum oscillator."""
+        ta = TechnicalAnalysis
+        n = len(close)
+        if n < long_period + short_period + 2:
+            return np.full(n, np.nan), np.full(n, np.nan)
+        momentum = np.zeros(n)
+        momentum[1:] = np.diff(close)
+        abs_momentum = np.abs(momentum)
+        # First smoothing
+        ema1_m = ta.ema(momentum, long_period)
+        ema1_a = ta.ema(abs_momentum, long_period)
+        # For second EMA, replace NaN with 0 to allow computation
+        ema1_m_clean = np.where(np.isnan(ema1_m), 0, ema1_m)
+        ema1_a_clean = np.where(np.isnan(ema1_a), 0, ema1_a)
+        double_m = ta.ema(ema1_m_clean, short_period)
+        double_a = ta.ema(ema1_a_clean, short_period)
+        tsi_arr = np.full(n, np.nan, dtype=float)
+        start_idx = long_period + short_period - 1
+        for i in range(start_idx, n):
+            if not np.isnan(double_m[i]) and not np.isnan(double_a[i]) and abs(double_a[i]) > 1e-10:
+                tsi_arr[i] = (double_m[i] / double_a[i]) * 100
+        tsi_clean = np.where(np.isnan(tsi_arr), 0, tsi_arr)
+        tsi_signal = ta.ema(tsi_clean, signal_period)
+        # Mask signal where TSI itself is NaN
+        tsi_signal = np.where(np.isnan(tsi_arr), np.nan, tsi_signal)
+        return tsi_arr, tsi_signal
+
+    @staticmethod
+    def pivot_trend(high, low, close, period=5):
+        """
+        Pivot Trend Indicator: identifies pivot highs/lows and trend direction.
+        Returns: trend array (+1=up, -1=down, 0=neutral), pivot_highs, pivot_lows
+        """
+        n = len(close)
+        trend = np.zeros(n, dtype=float)
+        pivot_highs = np.full(n, np.nan, dtype=float)
+        pivot_lows = np.full(n, np.nan, dtype=float)
+        last_ph = np.nan
+        last_pl = np.nan
+        for i in range(period, n - period):
+            # Pivot high: high[i] is highest in window
+            if high[i] == np.max(high[i-period:i+period+1]):
+                pivot_highs[i] = high[i]
+                last_ph = high[i]
+            # Pivot low: low[i] is lowest in window
+            if low[i] == np.min(low[i-period:i+period+1]):
+                pivot_lows[i] = low[i]
+                last_pl = low[i]
+        # Determine trend based on higher highs / lower lows
+        recent_phs = []
+        recent_pls = []
+        for i in range(n):
+            if not np.isnan(pivot_highs[i]):
+                recent_phs.append(pivot_highs[i])
+                if len(recent_phs) > 3: recent_phs.pop(0)
+            if not np.isnan(pivot_lows[i]):
+                recent_pls.append(pivot_lows[i])
+                if len(recent_pls) > 3: recent_pls.pop(0)
+            if len(recent_phs) >= 2 and len(recent_pls) >= 2:
+                hh = recent_phs[-1] > recent_phs[-2]  # higher high
+                hl = recent_pls[-1] > recent_pls[-2]   # higher low
+                lh = recent_phs[-1] < recent_phs[-2]   # lower high
+                ll = recent_pls[-1] < recent_pls[-2]    # lower low
+                if hh and hl: trend[i] = 1.0   # uptrend
+                elif lh and ll: trend[i] = -1.0 # downtrend
+                else: trend[i] = trend[i-1] if i > 0 else 0.0
+            elif i > 0:
+                trend[i] = trend[i-1]
+        return trend, pivot_highs, pivot_lows
+
+    @staticmethod
+    def pi_cycle_top(close):
+        """
+        Pi Cycle Top Indicator (BTC-specific).
+        Uses 111-day MA and 2x of 350-day MA.
+        When 111MA crosses above 2x350MA, historically signals BTC cycle tops.
+        Returns: ma_111, ma_350x2, crossover_signal array
+        """
+        ta = TechnicalAnalysis
+        n = len(close)
+        p1 = min(111, n - 1) if n > 1 else 1
+        p2 = min(350, n - 1) if n > 1 else 1
+        ma_111 = ta.sma(close, p1)
+        ma_350 = ta.sma(close, p2)
+        ma_350x2 = ma_350 * 2
+        signal = np.zeros(n, dtype=float)
+        for i in range(1, n):
+            if not np.isnan(ma_111[i]) and not np.isnan(ma_350x2[i]):
+                if ma_111[i] >= ma_350x2[i] and (np.isnan(ma_111[i-1]) or ma_111[i-1] < ma_350x2[i-1]):
+                    signal[i] = -1.0  # TOP signal (bearish)
+                elif ma_111[i] < ma_350x2[i]:
+                    gap_pct = ((ma_350x2[i] - ma_111[i]) / ma_350x2[i]) * 100
+                    if gap_pct > 30:
+                        signal[i] = 1.0  # Far from top (bullish)
+                    elif gap_pct > 10:
+                        signal[i] = 0.5  # Getting closer
+                    else:
+                        signal[i] = -0.5  # Very close to top (caution)
+        return ma_111, ma_350x2, signal
+
+    @staticmethod
+    def divergence_rsi(close, rsi_vals, lookback=20):
+        """
+        RSI Divergence Detection.
+        Bullish divergence: price makes lower low, RSI makes higher low.
+        Bearish divergence: price makes higher high, RSI makes lower high.
+        Returns: divergence array (+1=bullish, -1=bearish, 0=none)
+        """
+        n = len(close)
+        div = np.zeros(n, dtype=float)
+        lb = min(lookback, n // 4)
+        if lb < 5:
+            return div
+        for i in range(lb * 2, n):
+            # Find local price lows and RSI lows in recent window
+            price_window = close[i-lb:i+1]
+            rsi_window = rsi_vals[i-lb:i+1]
+            valid_rsi = ~np.isnan(rsi_window)
+            if not np.any(valid_rsi):
+                continue
+            # Check for bullish divergence (price lower low, RSI higher low)
+            price_min_idx = np.argmin(price_window)
+            if price_min_idx > 0 and price_min_idx < lb:
+                prev_price_low = np.min(price_window[:price_min_idx])
+                curr_price_low = price_window[price_min_idx]
+                if curr_price_low < prev_price_low:
+                    rsi_at_curr = rsi_window[price_min_idx] if valid_rsi[price_min_idx] else np.nan
+                    rsi_before = rsi_window[:price_min_idx]
+                    rsi_before_valid = rsi_before[~np.isnan(rsi_before)]
+                    if not np.isnan(rsi_at_curr) and len(rsi_before_valid) > 0:
+                        if rsi_at_curr > np.min(rsi_before_valid):
+                            div[i] = 1.0  # Bullish divergence
+            # Check for bearish divergence (price higher high, RSI lower high)
+            price_max_idx = np.argmax(price_window)
+            if price_max_idx > 0 and price_max_idx < lb:
+                prev_price_high = np.max(price_window[:price_max_idx])
+                curr_price_high = price_window[price_max_idx]
+                if curr_price_high > prev_price_high:
+                    rsi_at_curr = rsi_window[price_max_idx] if valid_rsi[price_max_idx] else np.nan
+                    rsi_before = rsi_window[:price_max_idx]
+                    rsi_before_valid = rsi_before[~np.isnan(rsi_before)]
+                    if not np.isnan(rsi_at_curr) and len(rsi_before_valid) > 0:
+                        if rsi_at_curr < np.max(rsi_before_valid):
+                            div[i] = -1.0  # Bearish divergence
+        return div
+
+    @staticmethod
+    def divergence_tsi(close, tsi_vals, lookback=20):
+        """TSI Divergence — same logic as RSI divergence but on TSI."""
+        return TechnicalAnalysis.divergence_rsi(close, tsi_vals, lookback)
+
+    @staticmethod
     def support_resistance(high, low, close, lookback=20):
         levels = []
         n = len(close)
@@ -248,15 +438,15 @@ class TechnicalAnalysis:
 
 class PredictionEngine:
     """
-    Multi-indicator weighted prediction system.
-    Combines RSI, MACD, Bollinger, Stochastic, ADX+DI,
-    EMA(9/21), EMA(50/200), VWAP, Ichimoku into a
-    composite confidence score.
+    Multi-indicator weighted prediction system v3.
+    15 indicators with weighted scoring for BUY/SELL/HOLD signals.
     """
     WEIGHTS = {
-        "rsi": 0.12, "macd": 0.15, "bollinger": 0.10,
-        "stochastic": 0.08, "adx": 0.15, "ema_fast": 0.12,
-        "ema_slow": 0.10, "vwap": 0.08, "ichimoku": 0.10,
+        "rsi": 0.08, "macd": 0.10, "bollinger": 0.07,
+        "stochastic": 0.05, "adx": 0.10, "ema_fast": 0.08,
+        "ema_slow": 0.07, "vwap": 0.05, "ichimoku": 0.07,
+        "stoch_rsi": 0.08, "obv": 0.06, "tsi": 0.07,
+        "pivot_trend": 0.05, "divergence": 0.07,
     }
 
     @staticmethod
@@ -275,9 +465,9 @@ class PredictionEngine:
         # RSI
         rsi_v = ta.rsi(close, 14)
         r = val(rsi_v) or 50
-        if r < 30: signals["rsi"] = {"score":1.0,"value":r,"signal":"OVERSOLD -> BUY","detail":f"RSI={r:.1f}"}
+        if r < 30: signals["rsi"] = {"score":1.0,"value":r,"signal":"OVERSOLD → BUY","detail":f"RSI={r:.1f}"}
         elif r < 40: signals["rsi"] = {"score":0.5,"value":r,"signal":"NEAR OVERSOLD","detail":f"RSI={r:.1f}"}
-        elif r > 70: signals["rsi"] = {"score":-1.0,"value":r,"signal":"OVERBOUGHT -> SELL","detail":f"RSI={r:.1f}"}
+        elif r > 70: signals["rsi"] = {"score":-1.0,"value":r,"signal":"OVERBOUGHT → SELL","detail":f"RSI={r:.1f}"}
         elif r > 60: signals["rsi"] = {"score":-0.5,"value":r,"signal":"NEAR OVERBOUGHT","detail":f"RSI={r:.1f}"}
         else: signals["rsi"] = {"score":0.0,"value":r,"signal":"NEUTRAL","detail":f"RSI={r:.1f}"}
 
@@ -285,9 +475,9 @@ class PredictionEngine:
         ml, sl, hist = ta.macd(close)
         m, s, h = val(ml), val(sl), val(hist)
         hp = hist[L-1] if L > 0 and not np.isnan(hist[L-1]) else 0
-        if m > s and h > hp: signals["macd"] = {"score":1.0,"value":m,"signal":"BULLISH CROSSOVER","detail":f"MACD={m:.2f}>Sig={s:.2f}, Hist rising"}
+        if m > s and h > hp: signals["macd"] = {"score":1.0,"value":m,"signal":"BULLISH CROSSOVER","detail":f"MACD={m:.2f}&gt;Sig={s:.2f}, Hist rising"}
         elif m > s: signals["macd"] = {"score":0.5,"value":m,"signal":"BULLISH","detail":f"MACD above signal"}
-        elif m < s and h < hp: signals["macd"] = {"score":-1.0,"value":m,"signal":"BEARISH CROSSOVER","detail":f"MACD={m:.2f}<Sig={s:.2f}, Hist falling"}
+        elif m < s and h < hp: signals["macd"] = {"score":-1.0,"value":m,"signal":"BEARISH CROSSOVER","detail":f"MACD={m:.2f}&lt;Sig={s:.2f}, Hist falling"}
         elif m < s: signals["macd"] = {"score":-0.5,"value":m,"signal":"BEARISH","detail":f"MACD below signal"}
         else: signals["macd"] = {"score":0.0,"value":m,"signal":"NEUTRAL","detail":"MACD converging"}
 
@@ -295,17 +485,17 @@ class PredictionEngine:
         bu, bm, bl = ta.bollinger_bands(close)
         bbu, bbm, bbl = val(bu) or close[L]*1.02, val(bm) or close[L], val(bl) or close[L]*0.98
         bw = (bbu-bbl)/bbm*100 if bbm > 0 else 0
-        if close[L] <= bbl: signals["bollinger"] = {"score":1.0,"value":close[L],"signal":"AT LOWER BAND -> BUY","detail":f"Width={bw:.1f}%"}
-        elif close[L] >= bbu: signals["bollinger"] = {"score":-1.0,"value":close[L],"signal":"AT UPPER BAND -> SELL","detail":f"Width={bw:.1f}%"}
+        if close[L] <= bbl: signals["bollinger"] = {"score":1.0,"value":close[L],"signal":"AT LOWER BAND → BUY","detail":f"Width={bw:.1f}%"}
+        elif close[L] >= bbu: signals["bollinger"] = {"score":-1.0,"value":close[L],"signal":"AT UPPER BAND → SELL","detail":f"Width={bw:.1f}%"}
         elif close[L] < bbm: signals["bollinger"] = {"score":0.3,"value":close[L],"signal":"BELOW MIDDLE","detail":f"Width={bw:.1f}%"}
         else: signals["bollinger"] = {"score":-0.3,"value":close[L],"signal":"ABOVE MIDDLE","detail":f"Width={bw:.1f}%"}
 
         # Stochastic
         sk, sd = ta.stochastic(high, low, close)
         kn, dn = val(sk) or 50, val(sd) or 50
-        if kn < 20 and kn > dn: signals["stochastic"] = {"score":1.0,"value":kn,"signal":"OVERSOLD+K>D -> BUY","detail":f"%K={kn:.1f},%D={dn:.1f}"}
+        if kn < 20 and kn > dn: signals["stochastic"] = {"score":1.0,"value":kn,"signal":"OVERSOLD + K&gt;D","detail":f"%K={kn:.1f},%D={dn:.1f}"}
         elif kn < 20: signals["stochastic"] = {"score":0.5,"value":kn,"signal":"OVERSOLD","detail":f"%K={kn:.1f}"}
-        elif kn > 80 and kn < dn: signals["stochastic"] = {"score":-1.0,"value":kn,"signal":"OVERBOUGHT+K<D -> SELL","detail":f"%K={kn:.1f},%D={dn:.1f}"}
+        elif kn > 80 and kn < dn: signals["stochastic"] = {"score":-1.0,"value":kn,"signal":"OVERBOUGHT + K&lt;D","detail":f"%K={kn:.1f},%D={dn:.1f}"}
         elif kn > 80: signals["stochastic"] = {"score":-0.5,"value":kn,"signal":"OVERBOUGHT","detail":f"%K={kn:.1f}"}
         else: signals["stochastic"] = {"score":0.0,"value":kn,"signal":"NEUTRAL","detail":f"%K={kn:.1f},%D={dn:.1f}"}
 
@@ -325,18 +515,18 @@ class PredictionEngine:
         e9n, e21n = val(e9) or close[L], val(e21) or close[L]
         e9p = e9[L-1] if L>0 and not np.isnan(e9[L-1]) else e9n
         e21p = e21[L-1] if L>0 and not np.isnan(e21[L-1]) else e21n
-        if e9n > e21n and e9p <= e21p: signals["ema_fast"] = {"score":1.0,"value":e9n,"signal":"GOLDEN CROSS 9/21","detail":f"EMA9={e9n:.1f}>EMA21={e21n:.1f}"}
-        elif e9n > e21n: signals["ema_fast"] = {"score":0.5,"value":e9n,"signal":"EMA9>EMA21","detail":f"Bullish alignment"}
-        elif e9n < e21n and e9p >= e21p: signals["ema_fast"] = {"score":-1.0,"value":e9n,"signal":"DEATH CROSS 9/21","detail":f"EMA9={e9n:.1f}<EMA21={e21n:.1f}"}
-        elif e9n < e21n: signals["ema_fast"] = {"score":-0.5,"value":e9n,"signal":"EMA9<EMA21","detail":"Bearish alignment"}
+        if e9n > e21n and e9p <= e21p: signals["ema_fast"] = {"score":1.0,"value":e9n,"signal":"GOLDEN CROSS 9/21","detail":f"EMA9={e9n:.1f} &gt; EMA21={e21n:.1f}"}
+        elif e9n > e21n: signals["ema_fast"] = {"score":0.5,"value":e9n,"signal":"EMA9 &gt; EMA21","detail":f"Bullish alignment"}
+        elif e9n < e21n and e9p >= e21p: signals["ema_fast"] = {"score":-1.0,"value":e9n,"signal":"DEATH CROSS 9/21","detail":f"EMA9={e9n:.1f} &lt; EMA21={e21n:.1f}"}
+        elif e9n < e21n: signals["ema_fast"] = {"score":-0.5,"value":e9n,"signal":"EMA9 &lt; EMA21","detail":"Bearish alignment"}
         else: signals["ema_fast"] = {"score":0.0,"value":e9n,"signal":"CONVERGING","detail":"EMA9~EMA21"}
 
         # EMA Slow (50/200)
         e50 = ta.ema(close, min(50, len(close)-1))
         e200 = ta.ema(close, min(200, len(close)-1))
         e50n, e200n = val(e50) or close[L], val(e200) or close[L]
-        if e50n > e200n: signals["ema_slow"] = {"score":0.7,"value":e50n,"signal":"EMA50>EMA200 BULLISH","detail":f"Long-term bullish"}
-        elif e50n < e200n: signals["ema_slow"] = {"score":-0.7,"value":e50n,"signal":"EMA50<EMA200 BEARISH","detail":"Long-term bearish"}
+        if e50n > e200n: signals["ema_slow"] = {"score":0.7,"value":e50n,"signal":"EMA50 &gt; EMA200 BULLISH","detail":f"Long-term bullish"}
+        elif e50n < e200n: signals["ema_slow"] = {"score":-0.7,"value":e50n,"signal":"EMA50 &lt; EMA200 BEARISH","detail":"Long-term bearish"}
         else: signals["ema_slow"] = {"score":0.0,"value":e50n,"signal":"FLAT","detail":"EMA50~EMA200"}
 
         # VWAP
@@ -352,11 +542,69 @@ class PredictionEngine:
         tk, kj = val(tks) or close[L], val(kjs) or close[L]
         san, sbn = val(sa) or close[L], val(sb) or close[L]
         ct, cb = max(san, sbn), min(san, sbn)
-        if close[L] > ct and tk > kj: signals["ichimoku"] = {"score":1.0,"value":close[L],"signal":"ABOVE CLOUD+TK>KJ -> BUY","detail":f"Strong bullish"}
+        if close[L] > ct and tk > kj: signals["ichimoku"] = {"score":1.0,"value":close[L],"signal":"ABOVE CLOUD + TK&gt;KJ","detail":f"Strong bullish"}
         elif close[L] > ct: signals["ichimoku"] = {"score":0.5,"value":close[L],"signal":"ABOVE CLOUD","detail":"Bullish"}
-        elif close[L] < cb and tk < kj: signals["ichimoku"] = {"score":-1.0,"value":close[L],"signal":"BELOW CLOUD+TK<KJ -> SELL","detail":"Strong bearish"}
+        elif close[L] < cb and tk < kj: signals["ichimoku"] = {"score":-1.0,"value":close[L],"signal":"BELOW CLOUD + TK&lt;KJ","detail":"Strong bearish"}
         elif close[L] < cb: signals["ichimoku"] = {"score":-0.5,"value":close[L],"signal":"BELOW CLOUD","detail":"Bearish"}
         else: signals["ichimoku"] = {"score":0.0,"value":close[L],"signal":"IN CLOUD","detail":"Indecision"}
+
+        # Stochastic RSI
+        srsi_k, srsi_d = ta.stoch_rsi(close)
+        srk = val(srsi_k) or 50
+        srd = val(srsi_d) or 50
+        if srk < 20 and srk > srd: signals["stoch_rsi"] = {"score":1.0,"value":srk,"signal":"OVERSOLD + K&gt;D","detail":f"StochRSI K={srk:.1f}, D={srd:.1f}"}
+        elif srk < 20: signals["stoch_rsi"] = {"score":0.7,"value":srk,"signal":"OVERSOLD","detail":f"StochRSI K={srk:.1f}"}
+        elif srk > 80 and srk < srd: signals["stoch_rsi"] = {"score":-1.0,"value":srk,"signal":"OVERBOUGHT + K&lt;D","detail":f"StochRSI K={srk:.1f}, D={srd:.1f}"}
+        elif srk > 80: signals["stoch_rsi"] = {"score":-0.7,"value":srk,"signal":"OVERBOUGHT","detail":f"StochRSI K={srk:.1f}"}
+        else: signals["stoch_rsi"] = {"score":0.0,"value":srk,"signal":"NEUTRAL","detail":f"StochRSI K={srk:.1f}, D={srd:.1f}"}
+
+        # OBV
+        obv_vals = ta.obv(close, volume)
+        obv_ema = ta.ema(obv_vals, 20)
+        obv_now = obv_vals[L]
+        obv_ema_now = val(obv_ema) or obv_now
+        obv_slope = (obv_vals[L] - obv_vals[max(0,L-5)]) if L >= 5 else 0
+        if obv_now > obv_ema_now and obv_slope > 0: signals["obv"] = {"score":0.8,"value":obv_now,"signal":"OBV RISING+ABOVE EMA","detail":"Volume confirms uptrend"}
+        elif obv_now > obv_ema_now: signals["obv"] = {"score":0.4,"value":obv_now,"signal":"OBV ABOVE EMA","detail":"Mild bullish volume"}
+        elif obv_now < obv_ema_now and obv_slope < 0: signals["obv"] = {"score":-0.8,"value":obv_now,"signal":"OBV FALLING+BELOW EMA","detail":"Volume confirms downtrend"}
+        elif obv_now < obv_ema_now: signals["obv"] = {"score":-0.4,"value":obv_now,"signal":"OBV BELOW EMA","detail":"Mild bearish volume"}
+        else: signals["obv"] = {"score":0.0,"value":obv_now,"signal":"NEUTRAL","detail":"OBV flat"}
+
+        # TSI
+        tsi_vals, tsi_sig = ta.tsi(close)
+        tsi_now = val(tsi_vals)
+        tsi_sig_now = val(tsi_sig)
+        if tsi_now > 0 and tsi_now > tsi_sig_now: signals["tsi"] = {"score":0.8,"value":tsi_now,"signal":"BULLISH (TSI+, above signal)","detail":f"TSI={tsi_now:.1f}, Sig={tsi_sig_now:.1f}"}
+        elif tsi_now > 0: signals["tsi"] = {"score":0.3,"value":tsi_now,"signal":"MILD BULLISH","detail":f"TSI={tsi_now:.1f}"}
+        elif tsi_now < 0 and tsi_now < tsi_sig_now: signals["tsi"] = {"score":-0.8,"value":tsi_now,"signal":"BEARISH (TSI-, below signal)","detail":f"TSI={tsi_now:.1f}, Sig={tsi_sig_now:.1f}"}
+        elif tsi_now < 0: signals["tsi"] = {"score":-0.3,"value":tsi_now,"signal":"MILD BEARISH","detail":f"TSI={tsi_now:.1f}"}
+        else: signals["tsi"] = {"score":0.0,"value":tsi_now,"signal":"NEUTRAL","detail":f"TSI={tsi_now:.1f}"}
+
+        # Pivot Trend
+        pv_trend, pv_highs, pv_lows = ta.pivot_trend(high, low, close)
+        pv_now = pv_trend[L]
+        if pv_now > 0: signals["pivot_trend"] = {"score":0.8,"value":pv_now,"signal":"UPTREND (HH+HL)","detail":"Higher highs & higher lows"}
+        elif pv_now < 0: signals["pivot_trend"] = {"score":-0.8,"value":pv_now,"signal":"DOWNTREND (LH+LL)","detail":"Lower highs & lower lows"}
+        else: signals["pivot_trend"] = {"score":0.0,"value":pv_now,"signal":"NO CLEAR TREND","detail":"Mixed pivots"}
+
+        # Divergence (RSI + TSI combined)
+        rsi_div = ta.divergence_rsi(close, rsi_v)
+        tsi_div = ta.divergence_tsi(close, tsi_vals)
+        # Use most recent divergence within last 10 bars
+        recent_rsi_div = rsi_div[max(0,L-10):L+1]
+        recent_tsi_div = tsi_div[max(0,L-10):L+1]
+        bull_div = np.any(recent_rsi_div > 0) or np.any(recent_tsi_div > 0)
+        bear_div = np.any(recent_rsi_div < 0) or np.any(recent_tsi_div < 0)
+        both_bull = np.any(recent_rsi_div > 0) and np.any(recent_tsi_div > 0)
+        both_bear = np.any(recent_rsi_div < 0) and np.any(recent_tsi_div < 0)
+        if both_bull: signals["divergence"] = {"score":1.0,"value":1,"signal":"STRONG BULLISH DIV (RSI+TSI)","detail":"Both RSI & TSI show bullish divergence"}
+        elif bull_div: signals["divergence"] = {"score":0.6,"value":1,"signal":"BULLISH DIVERGENCE","detail":"Price lower low, oscillator higher low"}
+        elif both_bear: signals["divergence"] = {"score":-1.0,"value":-1,"signal":"STRONG BEARISH DIV (RSI+TSI)","detail":"Both RSI & TSI show bearish divergence"}
+        elif bear_div: signals["divergence"] = {"score":-0.6,"value":-1,"signal":"BEARISH DIVERGENCE","detail":"Price higher high, oscillator lower high"}
+        else: signals["divergence"] = {"score":0.0,"value":0,"signal":"NO DIVERGENCE","detail":"Price and oscillators aligned"}
+
+        # Pi Cycle (BTC only — informational, not weighted)
+        pi_111, pi_350x2, pi_sig = ta.pi_cycle_top(close)
 
         # Composite
         weights = PredictionEngine.WEIGHTS
@@ -377,7 +625,13 @@ class PredictionEngine:
                 "rsi":rsi_v,"macd_line":ml,"macd_signal":sl,"macd_hist":hist,
                 "bb_upper":bu,"bb_middle":bm,"bb_lower":bl,"stoch_k":sk,"stoch_d":sd,
                 "adx":adx_v,"plus_di":pdi,"minus_di":mdi,"ema9":e9,"ema21":e21,
-                "ema50":e50,"ema200":e200,"vwap":vw}
+                "ema50":e50,"ema200":e200,"vwap":vw,
+                "stoch_rsi_k":srsi_k,"stoch_rsi_d":srsi_d,
+                "obv":obv_vals,"obv_ema":obv_ema,
+                "tsi":tsi_vals,"tsi_signal":tsi_sig,
+                "pivot_trend":pv_trend,"pivot_highs":pv_highs,"pivot_lows":pv_lows,
+                "rsi_divergence":rsi_div,"tsi_divergence":tsi_div,
+                "pi_111":pi_111,"pi_350x2":pi_350x2,"pi_signal":pi_sig}
 
 
 # =============================================
@@ -608,8 +862,8 @@ def main():
 
     coin_map = {"BTC":"bitcoin","ETH":"ethereum","SOL":"solana"}
 
-    tabs = st.tabs(["📉 Price Action","📐 ADX/DMI","🤖 Prediction","📊 Options Chain",
-                     "🛒 Place Order","📈 Market Data","💼 Portfolio","📋 Orders","🧮 P&L Calc"])
+    tabs = st.tabs(["📉 Price Action","📐 ADX/DMI","🤖 Prediction","🔬 Advanced","₿ BTC Models",
+                     "📊 Options Chain","🛒 Place Order","📈 Market Data","💼 Portfolio","📋 Orders","🧮 P&L Calc"])
 
     # ═══ TAB 1: PRICE ACTION ═══
     with tabs[0]:
@@ -734,9 +988,11 @@ def main():
 
         # Breakdown
         st.markdown("##### Indicator Breakdown")
-        names = {"rsi":("RSI(14)","📊",12),"macd":("MACD(12/26/9)","📈",15),"bollinger":("Bollinger(20,2)","📉",10),
-                 "stochastic":("Stoch(14,3)","🔄",8),"adx":("ADX+DI(14)","📐",15),"ema_fast":("EMA 9/21","⚡",12),
-                 "ema_slow":("EMA 50/200","🐌",10),"vwap":("VWAP","📊",8),"ichimoku":("Ichimoku","☁️",10)}
+        names = {"rsi":("RSI(14)","📊",8),"macd":("MACD(12/26/9)","📈",10),"bollinger":("Bollinger(20,2)","📉",7),
+                 "stochastic":("Stoch(14,3)","🔄",5),"adx":("ADX+DI(14)","📐",10),"ema_fast":("EMA 9/21","⚡",8),
+                 "ema_slow":("EMA 50/200","🐌",7),"vwap":("VWAP","📊",5),"ichimoku":("Ichimoku","☁️",7),
+                 "stoch_rsi":("StochRSI(14)","🌀",8),"obv":("OBV","📦",6),"tsi":("TSI(25/13)","💪",7),
+                 "pivot_trend":("Pivot Trend","📌",5),"divergence":("Divergence(RSI+TSI)","🔀",7)}
         for key,(nm,ico,wt) in names.items():
             if key not in res["signals"]: continue
             sg = res["signals"][key]
@@ -756,7 +1012,7 @@ def main():
 
         # Indicator charts
         st.markdown("##### Indicator Charts")
-        ch_sel = st.multiselect("Show",["RSI","MACD","Stochastic","Bollinger Bands"],default=["RSI","MACD"],key="pr_ch")
+        ch_sel = st.multiselect("Show",["RSI","MACD","Stochastic","Bollinger Bands","StochRSI","OBV","TSI"],default=["RSI","MACD"],key="pr_ch")
         plot_cfg = dict(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",
                         height=250,margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono"))
         if "RSI" in ch_sel:
@@ -788,11 +1044,266 @@ def main():
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_middle"],name="Mid",line=dict(color="#f59e0b",width=1,dash="dot")))
             f4.update_layout(**plot_cfg,title="Bollinger(20,2)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"),height=300)
             st.plotly_chart(f4,use_container_width=True)
+        if "StochRSI" in ch_sel:
+            f5=go.Figure()
+            f5.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_rsi_k"],name="StochRSI %K",line=dict(color="#06b6d4",width=2)))
+            f5.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_rsi_d"],name="StochRSI %D",line=dict(color="#f59e0b",width=1.5,dash="dot")))
+            f5.add_hline(y=80,line_dash="dash",line_color="#ff3366"); f5.add_hline(y=20,line_dash="dash",line_color="#00ff88")
+            f5.add_hrect(y0=20,y1=80,fillcolor="rgba(245,158,11,.03)",line_width=0)
+            f5.update_layout(**plot_cfg,title="Stochastic RSI (14,14,3,3)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
+            st.plotly_chart(f5,use_container_width=True)
+        if "OBV" in ch_sel:
+            f6=go.Figure()
+            f6.add_trace(go.Scatter(x=dfp["timestamp"],y=res["obv"],name="OBV",line=dict(color="#a855f7",width=2)))
+            f6.add_trace(go.Scatter(x=dfp["timestamp"],y=res["obv_ema"],name="OBV EMA(20)",line=dict(color="#f59e0b",width=1.5,dash="dot")))
+            f6.update_layout(**plot_cfg,title="On-Balance Volume",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
+            st.plotly_chart(f6,use_container_width=True)
+        if "TSI" in ch_sel:
+            f7=go.Figure()
+            f7.add_trace(go.Scatter(x=dfp["timestamp"],y=res["tsi"],name="TSI",line=dict(color="#3b82f6",width=2)))
+            f7.add_trace(go.Scatter(x=dfp["timestamp"],y=res["tsi_signal"],name="Signal",line=dict(color="#ff3366",width=1.5,dash="dot")))
+            f7.add_hline(y=0,line_dash="dash",line_color="#475569")
+            f7.update_layout(**plot_cfg,title="True Strength Index (25/13/7)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
+            st.plotly_chart(f7,use_container_width=True)
 
         st.caption("Predictions are technical-indicator based only. NOT financial advice. Crypto is volatile and unregulated.")
 
-    # ═══ TAB 4: OPTIONS CHAIN ═══
+    # ═══ TAB 4: ADVANCED INDICATORS ═══
     with tabs[3]:
+        st.markdown("### Advanced Indicators")
+        ax1,ax2,ax3 = st.columns(3)
+        with ax1: adv_coin = st.selectbox("Asset",["BTC","ETH","SOL"],key="adv_c")
+        with ax2: adv_days = st.selectbox("Window",[30,60,90,180],index=2,format_func=lambda x:f"{x}D",key="adv_d")
+        with ax3:
+            if st.button("Refresh",type="primary",key="adv_ref",use_container_width=True): st.cache_data.clear()
+
+        dfa = fetch_ohlcv(coin_map[adv_coin],"usd",adv_days)
+        ta = TechnicalAnalysis
+        cl_a = dfa["close"].values.astype(float)
+        hi_a = dfa["high"].values.astype(float)
+        lo_a = dfa["low"].values.astype(float)
+        vol_a = dfa["volume"].values.astype(float)
+
+        adv_sel = st.multiselect("Select Indicators",
+            ["StochRSI","OBV","TSI","Pivot Trend","RSI Divergence","TSI Divergence"],
+            default=["StochRSI","TSI","Pivot Trend"],key="adv_sel")
+
+        if "StochRSI" in adv_sel:
+            srk,srd = ta.stoch_rsi(cl_a)
+            fig_sr = make_subplots(rows=2,cols=1,shared_xaxes=True,vertical_spacing=.08,row_heights=[.55,.45],
+                                   subplot_titles=[f"{adv_coin}/USD","StochRSI (14,14,3,3)"])
+            fig_sr.add_trace(go.Candlestick(x=dfa["timestamp"],open=dfa["open"],high=dfa["high"],low=dfa["low"],close=dfa["close"],
+                name="Price",increasing_line_color="#00ff88",decreasing_line_color="#ff3366",
+                increasing_fillcolor="#00ff88",decreasing_fillcolor="#ff3366"),row=1,col=1)
+            fig_sr.add_trace(go.Scatter(x=dfa["timestamp"],y=srk,name="%K",line=dict(color="#06b6d4",width=2)),row=2,col=1)
+            fig_sr.add_trace(go.Scatter(x=dfa["timestamp"],y=srd,name="%D",line=dict(color="#f59e0b",width=1.5,dash="dot")),row=2,col=1)
+            fig_sr.add_hline(y=80,line_dash="dash",line_color="#ff3366",row=2,col=1)
+            fig_sr.add_hline(y=20,line_dash="dash",line_color="#00ff88",row=2,col=1)
+            fig_sr.add_hrect(y0=20,y1=80,fillcolor="rgba(100,100,100,.05)",line_width=0,row=2,col=1)
+            fig_sr.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=500,
+                                  margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11),
+                                  xaxis_rangeslider_visible=False)
+            fig_sr.update_xaxes(gridcolor="#1e293b"); fig_sr.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_sr,use_container_width=True)
+            srk_now = srk[~np.isnan(srk)][-1] if np.any(~np.isnan(srk)) else 50
+            srd_now = srd[~np.isnan(srd)][-1] if np.any(~np.isnan(srd)) else 50
+            zone = "OVERSOLD" if srk_now<20 else ("OVERBOUGHT" if srk_now>80 else "NEUTRAL")
+            zcls = "g" if srk_now<20 else ("r" if srk_now>80 else "go")
+            sc1,sc2,sc3 = st.columns(3)
+            with sc1: st.markdown(f'<div class="mc"><div class="ml">StochRSI %K</div><div class="mv {zcls}">{srk_now:.1f}</div></div>',unsafe_allow_html=True)
+            with sc2: st.markdown(f'<div class="mc"><div class="ml">StochRSI %D</div><div class="mv">{srd_now:.1f}</div></div>',unsafe_allow_html=True)
+            with sc3: st.markdown(f'<div class="mc"><div class="ml">Zone</div><div class="mv {zcls}">{zone}</div></div>',unsafe_allow_html=True)
+
+        if "OBV" in adv_sel:
+            obv_v = ta.obv(cl_a, vol_a)
+            obv_e = ta.ema(obv_v, 20)
+            fig_ob = make_subplots(rows=2,cols=1,shared_xaxes=True,vertical_spacing=.08,row_heights=[.5,.5],
+                                   subplot_titles=["Price","On-Balance Volume"])
+            fig_ob.add_trace(go.Scatter(x=dfa["timestamp"],y=cl_a,name="Price",line=dict(color="#e2e8f0",width=2)),row=1,col=1)
+            fig_ob.add_trace(go.Scatter(x=dfa["timestamp"],y=obv_v,name="OBV",line=dict(color="#a855f7",width=2)),row=2,col=1)
+            fig_ob.add_trace(go.Scatter(x=dfa["timestamp"],y=obv_e,name="OBV EMA(20)",line=dict(color="#f59e0b",width=1.5,dash="dot")),row=2,col=1)
+            fig_ob.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
+                                  margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
+            fig_ob.update_xaxes(gridcolor="#1e293b"); fig_ob.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_ob,use_container_width=True)
+
+        if "TSI" in adv_sel:
+            tsi_v, tsi_s = ta.tsi(cl_a)
+            fig_ts = make_subplots(rows=2,cols=1,shared_xaxes=True,vertical_spacing=.08,row_heights=[.5,.5],
+                                   subplot_titles=["Price","True Strength Index (25/13/7)"])
+            fig_ts.add_trace(go.Scatter(x=dfa["timestamp"],y=cl_a,name="Price",line=dict(color="#e2e8f0",width=2)),row=1,col=1)
+            fig_ts.add_trace(go.Scatter(x=dfa["timestamp"],y=tsi_v,name="TSI",line=dict(color="#3b82f6",width=2)),row=2,col=1)
+            fig_ts.add_trace(go.Scatter(x=dfa["timestamp"],y=tsi_s,name="Signal",line=dict(color="#ff3366",width=1.5,dash="dot")),row=2,col=1)
+            fig_ts.add_hline(y=0,line_dash="dash",line_color="#475569",row=2,col=1)
+            fig_ts.add_hline(y=25,line_dash="dot",line_color="rgba(0,255,136,.3)",annotation_text="Overbought",row=2,col=1)
+            fig_ts.add_hline(y=-25,line_dash="dot",line_color="rgba(255,51,102,.3)",annotation_text="Oversold",row=2,col=1)
+            fig_ts.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
+                                  margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
+            fig_ts.update_xaxes(gridcolor="#1e293b"); fig_ts.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_ts,use_container_width=True)
+            tn = tsi_v[~np.isnan(tsi_v)][-1] if np.any(~np.isnan(tsi_v)) else 0
+            ts_n = tsi_s[~np.isnan(tsi_s)][-1] if np.any(~np.isnan(tsi_s)) else 0
+            tc1,tc2 = st.columns(2)
+            with tc1: st.markdown(f'<div class="mc"><div class="ml">TSI Value</div><div class="mv {"g" if tn>0 else "r"}">{tn:.1f}</div></div>',unsafe_allow_html=True)
+            with tc2: st.markdown(f'<div class="mc"><div class="ml">TSI Signal</div><div class="mv">{ts_n:.1f}</div></div>',unsafe_allow_html=True)
+
+        if "Pivot Trend" in adv_sel:
+            pvt, pvh, pvl = ta.pivot_trend(hi_a, lo_a, cl_a)
+            fig_pv = go.Figure()
+            fig_pv.add_trace(go.Candlestick(x=dfa["timestamp"],open=dfa["open"],high=dfa["high"],low=dfa["low"],close=dfa["close"],
+                name="Price",increasing_line_color="#00ff88",decreasing_line_color="#ff3366",
+                increasing_fillcolor="#00ff88",decreasing_fillcolor="#ff3366"))
+            # Mark pivot highs and lows
+            ph_idx = np.where(~np.isnan(pvh))[0]
+            pl_idx = np.where(~np.isnan(pvl))[0]
+            if len(ph_idx)>0:
+                fig_pv.add_trace(go.Scatter(x=dfa["timestamp"].iloc[ph_idx],y=pvh[ph_idx],mode="markers",
+                    name="Pivot High",marker=dict(color="#ff3366",size=10,symbol="triangle-down")))
+            if len(pl_idx)>0:
+                fig_pv.add_trace(go.Scatter(x=dfa["timestamp"].iloc[pl_idx],y=pvl[pl_idx],mode="markers",
+                    name="Pivot Low",marker=dict(color="#00ff88",size=10,symbol="triangle-up")))
+            # Color background by trend
+            for i in range(1, len(pvt)):
+                if pvt[i] != pvt[i-1] and abs(pvt[i]) > 0:
+                    fig_pv.add_vrect(x0=dfa["timestamp"].iloc[i],x1=dfa["timestamp"].iloc[min(i+1,len(pvt)-1)],
+                        fillcolor="rgba(0,255,136,.03)" if pvt[i]>0 else "rgba(255,51,102,.03)",line_width=0)
+            fig_pv.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
+                                  margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
+                                  xaxis_rangeslider_visible=False,title="Pivot Trend (Higher Highs/Lows Detection)")
+            fig_pv.update_xaxes(gridcolor="#1e293b"); fig_pv.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_pv,use_container_width=True)
+            pvn = pvt[-1]
+            st.markdown(f'<div class="mc"><div class="ml">Pivot Trend</div><div class="mv {"g" if pvn>0 else ("r" if pvn<0 else "go")}">{"UPTREND (HH+HL)" if pvn>0 else ("DOWNTREND (LH+LL)" if pvn<0 else "NEUTRAL")}</div></div>',unsafe_allow_html=True)
+
+        if "RSI Divergence" in adv_sel or "TSI Divergence" in adv_sel:
+            rsi_v = ta.rsi(cl_a, 14)
+            tsi_v2, _ = ta.tsi(cl_a)
+            fig_dv = make_subplots(rows=3,cols=1,shared_xaxes=True,vertical_spacing=.05,row_heights=[.45,.28,.27],
+                                   subplot_titles=["Price","RSI + Divergence","TSI + Divergence"])
+            fig_dv.add_trace(go.Scatter(x=dfa["timestamp"],y=cl_a,name="Price",line=dict(color="#e2e8f0",width=2)),row=1,col=1)
+            fig_dv.add_trace(go.Scatter(x=dfa["timestamp"],y=rsi_v,name="RSI",line=dict(color="#a855f7",width=2)),row=2,col=1)
+            fig_dv.add_hline(y=70,line_dash="dash",line_color="#ff3366",row=2,col=1)
+            fig_dv.add_hline(y=30,line_dash="dash",line_color="#00ff88",row=2,col=1)
+            fig_dv.add_trace(go.Scatter(x=dfa["timestamp"],y=tsi_v2,name="TSI",line=dict(color="#3b82f6",width=2)),row=3,col=1)
+            fig_dv.add_hline(y=0,line_dash="dash",line_color="#475569",row=3,col=1)
+            # Mark divergences
+            rdiv = ta.divergence_rsi(cl_a, rsi_v)
+            tdiv = ta.divergence_tsi(cl_a, tsi_v2)
+            bull_r = np.where(rdiv > 0)[0]
+            bear_r = np.where(rdiv < 0)[0]
+            bull_t = np.where(tdiv > 0)[0]
+            bear_t = np.where(tdiv < 0)[0]
+            if len(bull_r)>0:
+                fig_dv.add_trace(go.Scatter(x=dfa["timestamp"].iloc[bull_r],y=cl_a[bull_r],mode="markers",
+                    name="RSI Bull Div",marker=dict(color="#00ff88",size=12,symbol="star")),row=1,col=1)
+            if len(bear_r)>0:
+                fig_dv.add_trace(go.Scatter(x=dfa["timestamp"].iloc[bear_r],y=cl_a[bear_r],mode="markers",
+                    name="RSI Bear Div",marker=dict(color="#ff3366",size=12,symbol="star")),row=1,col=1)
+            if len(bull_t)>0:
+                fig_dv.add_trace(go.Scatter(x=dfa["timestamp"].iloc[bull_t],y=cl_a[bull_t],mode="markers",
+                    name="TSI Bull Div",marker=dict(color="#4ade80",size=10,symbol="diamond")),row=1,col=1)
+            if len(bear_t)>0:
+                fig_dv.add_trace(go.Scatter(x=dfa["timestamp"].iloc[bear_t],y=cl_a[bear_t],mode="markers",
+                    name="TSI Bear Div",marker=dict(color="#f87171",size=10,symbol="diamond")),row=1,col=1)
+            fig_dv.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=600,
+                                  margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
+            fig_dv.update_xaxes(gridcolor="#1e293b"); fig_dv.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_dv,use_container_width=True)
+            recent_r = rdiv[-10:]
+            recent_t = tdiv[-10:]
+            has_bull = np.any(recent_r>0) or np.any(recent_t>0)
+            has_bear = np.any(recent_r<0) or np.any(recent_t<0)
+            dv1,dv2 = st.columns(2)
+            with dv1: st.markdown(f'<div class="mc"><div class="ml">RSI Divergences (Recent)</div><div class="mv {"g" if np.any(recent_r>0) else ("r" if np.any(recent_r<0) else "go")}">{"BULLISH" if np.any(recent_r>0) else ("BEARISH" if np.any(recent_r<0) else "NONE")}</div></div>',unsafe_allow_html=True)
+            with dv2: st.markdown(f'<div class="mc"><div class="ml">TSI Divergences (Recent)</div><div class="mv {"g" if np.any(recent_t>0) else ("r" if np.any(recent_t<0) else "go")}">{"BULLISH" if np.any(recent_t>0) else ("BEARISH" if np.any(recent_t<0) else "NONE")}</div></div>',unsafe_allow_html=True)
+
+        with st.expander("Indicator Reference Guide"):
+            st.markdown("""
+**StochRSI** — Applies the Stochastic oscillator to RSI values instead of price. More sensitive than plain RSI. %K < 20 = oversold, %K > 80 = overbought.
+
+**OBV (On-Balance Volume)** — Cumulative volume based on price direction. Rising OBV confirms uptrend, falling OBV confirms downtrend. Divergence from price signals potential reversal.
+
+**TSI (True Strength Index)** — Double-smoothed momentum oscillator. TSI > 0 = bullish momentum, TSI < 0 = bearish. Crossovers with signal line generate trade signals.
+
+**Pivot Trend** — Identifies swing highs/lows and determines trend by higher-highs + higher-lows (uptrend) or lower-highs + lower-lows (downtrend).
+
+**Divergence Analysis** — Detects when price and oscillators (RSI/TSI) diverge. Bullish divergence = price makes lower low but oscillator makes higher low. Bearish = opposite.
+            """)
+
+    # ═══ TAB 5: BTC MODELS ═══
+    with tabs[10]:
+        st.markdown("### ₿ Bitcoin-Specific Models")
+
+        btc_days = st.selectbox("Data Window",[90,180,365],index=1,format_func=lambda x:f"{x} Days",key="btc_d")
+        dfb = fetch_ohlcv("bitcoin","usd",btc_days)
+        cl_b = dfb["close"].values.astype(float)
+
+        st.markdown("#### Pi Cycle Top Indicator")
+        st.caption("The Pi Cycle Top uses the 111-day MA and 2x the 350-day MA. Historically, when the 111MA crosses above the 2x350MA, it has signaled major BTC cycle tops with remarkable accuracy (2013, 2017, 2021).")
+
+        pi_111, pi_350x2, pi_sig = TechnicalAnalysis.pi_cycle_top(cl_b)
+
+        fig_pi = go.Figure()
+        fig_pi.add_trace(go.Scatter(x=dfb["timestamp"],y=cl_b,name="BTC Price",line=dict(color="#e2e8f0",width=2)))
+        fig_pi.add_trace(go.Scatter(x=dfb["timestamp"],y=pi_111,name=f"111-day MA",line=dict(color="#00ff88",width=2)))
+        fig_pi.add_trace(go.Scatter(x=dfb["timestamp"],y=pi_350x2,name=f"2x 350-day MA",line=dict(color="#ff3366",width=2)))
+
+        # Mark crossover zones
+        for i in range(1, len(pi_sig)):
+            if pi_sig[i] == -1.0:
+                fig_pi.add_vline(x=dfb["timestamp"].iloc[i],line_color="rgba(255,51,102,.7)",line_width=3,
+                                  annotation_text="CYCLE TOP",annotation_position="top")
+
+        fig_pi.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
+                              margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
+                              legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1),
+                              yaxis_type="log",yaxis_title="BTC Price (log scale)")
+        fig_pi.update_xaxes(gridcolor="#1e293b"); fig_pi.update_yaxes(gridcolor="#1e293b")
+        st.plotly_chart(fig_pi,use_container_width=True)
+
+        # Status cards
+        pi111_now = pi_111[~np.isnan(pi_111)][-1] if np.any(~np.isnan(pi_111)) else 0
+        pi350_now = pi_350x2[~np.isnan(pi_350x2)][-1] if np.any(~np.isnan(pi_350x2)) else 0
+        gap = ((pi350_now - pi111_now)/pi350_now*100) if pi350_now > 0 else 0
+        if gap > 30: pi_status,pi_cls = "SAFE — Far from Top","g"
+        elif gap > 10: pi_status,pi_cls = "WATCH — Getting Closer","go"
+        elif gap > 0: pi_status,pi_cls = "CAUTION — Very Close","r"
+        else: pi_status,pi_cls = "CYCLE TOP ZONE","r"
+
+        pi1,pi2,pi3 = st.columns(3)
+        with pi1: st.markdown(f'<div class="mc"><div class="ml">111-Day MA</div><div class="mv g">${pi111_now:,.0f}</div></div>',unsafe_allow_html=True)
+        with pi2: st.markdown(f'<div class="mc"><div class="ml">2x 350-Day MA</div><div class="mv r">${pi350_now:,.0f}</div></div>',unsafe_allow_html=True)
+        with pi3: st.markdown(f'<div class="mc"><div class="ml">Pi Cycle Status</div><div class="mv {pi_cls}" style="font-size:18px">{pi_status}</div><div class="ml" style="margin-top:4px">Gap: {gap:.1f}%</div></div>',unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("#### MVRV-like Momentum (Simulated)")
+        st.caption("Compares current price to long-term moving averages as a proxy for overvaluation/undervaluation.")
+        ma200 = TechnicalAnalysis.sma(cl_b, min(200, len(cl_b)-1))
+        mvrv_proxy = np.where(~np.isnan(ma200) & (ma200 > 0), cl_b / ma200, np.nan)
+
+        fig_mv = go.Figure()
+        fig_mv.add_trace(go.Scatter(x=dfb["timestamp"],y=mvrv_proxy,name="Price/200MA Ratio",
+                                     line=dict(color="#06b6d4",width=2),fill="tozeroy",fillcolor="rgba(6,182,212,.08)"))
+        fig_mv.add_hline(y=1.0,line_dash="dash",line_color="#f59e0b",annotation_text="Fair Value (1.0)")
+        fig_mv.add_hline(y=2.0,line_dash="dash",line_color="#ff3366",annotation_text="Overvalued (2.0)")
+        fig_mv.add_hline(y=0.7,line_dash="dash",line_color="#00ff88",annotation_text="Undervalued (0.7)")
+        fig_mv.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=300,
+                              margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
+                              yaxis_title="Ratio")
+        fig_mv.update_xaxes(gridcolor="#1e293b"); fig_mv.update_yaxes(gridcolor="#1e293b")
+        st.plotly_chart(fig_mv,use_container_width=True)
+
+        mv_now = mvrv_proxy[~np.isnan(mvrv_proxy)][-1] if np.any(~np.isnan(mvrv_proxy)) else 1
+        if mv_now < 0.7: mv_status,mv_cls = "UNDERVALUED — Accumulation Zone","g"
+        elif mv_now < 1.2: mv_status,mv_cls = "FAIR VALUE","go"
+        elif mv_now < 2.0: mv_status,mv_cls = "OVERVALUED — Caution","r"
+        else: mv_status,mv_cls = "EXTREME — Potential Bubble","r"
+        st.markdown(f'<div class="mc"><div class="ml">Price/200MA Ratio</div><div class="mv {mv_cls}">{mv_now:.2f} — {mv_status}</div></div>',unsafe_allow_html=True)
+
+        st.caption("These BTC-specific models use simplified proxies. The Pi Cycle indicator requires 350+ days of daily data for full accuracy; shorter windows use available data with adjusted periods.")
+
+    # ═══ TAB 6: OPTIONS CHAIN ═══
+    with tabs[9]:
         st.markdown("### Options Chain")
         c1,c2,c3 = st.columns(3)
         with c1: ul = st.selectbox("Underlying",["BTC","ETH","SOL"],key="oc_u")
@@ -811,8 +1322,8 @@ def main():
             "Call Delta":"{:.3f}","Put Delta":"{:.3f}","Call Theta":"{:.2f}","Put Theta":"{:.2f}","Gamma":"{:.5f}","Vega":"{:.2f}","IV%":"{:.1f}%"}),
             use_container_width=True, height=450)
 
-    # ═══ TAB 5: PLACE ORDER ═══
-    with tabs[4]:
+    # ═══ TAB 7: PLACE ORDER ═══
+    with tabs[10]:
         st.markdown("### Place Order")
         if not (api_key and secret_key):
             st.warning("Enter API credentials in sidebar")
@@ -842,8 +1353,8 @@ def main():
                         st.info("Order prepared for CoinSwitch PRO Options")
                         st.json({"instrument":oi,"side":os_,"strike":ok,"expiry":oe,"contracts":ol,"premium":op})
 
-    # ═══ TAB 6: MARKET DATA ═══
-    with tabs[5]:
+    # ═══ TAB 8: MARKET DATA ═══
+    with tabs[9]:
         st.markdown("### Market Data")
         md_i = st.selectbox("Instrument",SUPPORTED_INSTRUMENTS,key="md_i")
         if cc:
@@ -863,8 +1374,8 @@ def main():
             except: st.info("Could not fetch")
         else: st.caption("Connect API for live data")
 
-    # ═══ TAB 7: PORTFOLIO ═══
-    with tabs[6]:
+    # ═══ TAB 9: PORTFOLIO ═══
+    with tabs[10]:
         st.markdown("### Portfolio")
         if not (api_key and secret_key): st.warning("Connect API")
         elif api_mode=="CSX Exchange":
@@ -875,8 +1386,8 @@ def main():
                     if av: st.dataframe(pd.DataFrame([{"Asset":a.upper(),"Available":float(q),"Locked":float(lk.get(a,0))} for a,q in av.items()]),use_container_width=True)
             except Exception as e: st.error(str(e))
 
-    # ═══ TAB 8: ORDERS ═══
-    with tabs[7]:
+    # ═══ TAB 10: ORDERS ═══
+    with tabs[9]:
         st.markdown("### Orders")
         if api_key and secret_key:
             oc1,oc2=st.columns(2)
@@ -907,8 +1418,8 @@ def main():
                 except Exception as e: st.error(str(e))
         else: st.warning("Connect API")
 
-    # ═══ TAB 9: P&L CALC ═══
-    with tabs[8]:
+    # ═══ TAB 11: P# ═══ TAB 9: P&L CALC ═══L CALC ═══
+    with tabs[10]:
         st.markdown("### P&L Calculator")
         cl1,cl2=st.columns(2)
         with cl1:
