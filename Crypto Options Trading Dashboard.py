@@ -671,7 +671,9 @@ def fetch_btc_price_inr():
         r = requests.get("https://api.coingecko.com/api/v3/simple/price",
                          params={"ids":"bitcoin","vs_currencies":"inr,usd"}, timeout=10)
         d = r.json()
-        return d.get("bitcoin",{}).get("inr",0), d.get("bitcoin",{}).get("usd",0)
+        inr = d.get("bitcoin",{}).get("inr",0) or 7500000
+        usd = d.get("bitcoin",{}).get("usd",0) or 90000
+        return inr, usd
     except Exception:
         return 7500000, 90000
 
@@ -772,19 +774,31 @@ class OptionsEngine:
     @staticmethod
     def generate_options_chain(spot, expiry_days=7):
         chain = []
+        if spot <= 0:
+            spot = 90000  # fallback
+        if expiry_days <= 0:
+            expiry_days = 1
         base = round(spot/1000)*1000
         for off in range(-5, 6):
             strike = round(base+off*(spot*0.02), 2)
+            if strike <= 0:
+                continue
             t = expiry_days/365; vol=0.65; r_=0.05
-            d1 = (math.log(spot/strike)+(r_+vol**2/2)*t)/(vol*math.sqrt(t))
-            d2 = d1-vol*math.sqrt(t)
-            def nc(x): return 0.5*(1+math.erf(x/math.sqrt(2)))
-            cp = spot*nc(d1)-strike*math.exp(-r_*t)*nc(d2)
-            pp = strike*math.exp(-r_*t)*nc(-d2)-spot*nc(-d1)
-            dc=round(nc(d1),4); dp=round(dc-1,4)
-            g=round(math.exp(-d1**2/2)/(spot*vol*math.sqrt(2*math.pi*t)),6)
-            th=round(-(spot*vol*math.exp(-d1**2/2))/(2*math.sqrt(2*math.pi*t))-r_*strike*math.exp(-r_*t)*nc(d2),2)
-            vg=round(spot*math.sqrt(t)*math.exp(-d1**2/2)/math.sqrt(2*math.pi),2)
+            sqrt_t = math.sqrt(t)
+            if sqrt_t == 0:
+                continue
+            try:
+                d1 = (math.log(spot/strike)+(r_+vol**2/2)*t)/(vol*sqrt_t)
+                d2 = d1-vol*sqrt_t
+                def nc(x): return 0.5*(1+math.erf(x/math.sqrt(2)))
+                cp = spot*nc(d1)-strike*math.exp(-r_*t)*nc(d2)
+                pp = strike*math.exp(-r_*t)*nc(-d2)-spot*nc(-d1)
+                dc=round(nc(d1),4); dp=round(dc-1,4)
+                g=round(math.exp(-d1**2/2)/(spot*vol*math.sqrt(2*math.pi*t)),6)
+                th=round(-(spot*vol*math.exp(-d1**2/2))/(2*math.sqrt(2*math.pi*t))-r_*strike*math.exp(-r_*t)*nc(d2),2)
+                vg=round(spot*math.sqrt(t)*math.exp(-d1**2/2)/math.sqrt(2*math.pi),2)
+            except (ValueError, ZeroDivisionError):
+                continue
             mn="ITM" if spot>strike else ("ATM" if abs(spot-strike)<spot*0.005 else "OTM")
             mp="OTM" if mn=="ITM" else ("ATM" if mn=="ATM" else "ITM")
             chain.append({"Strike":strike,"Call Price":round(max(cp,.01),2),"Call Delta":dc,
