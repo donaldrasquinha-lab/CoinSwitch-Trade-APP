@@ -914,7 +914,7 @@ def main():
                           margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
                           xaxis_rangeslider_visible=False,legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
         fig.update_xaxes(gridcolor="#1e293b"); fig.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
         sym = "₹" if pa_ccy=="inr" else "$"
         chg = ((cl[-1]-cl[0])/cl[0])*100
@@ -949,7 +949,7 @@ def main():
                            margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11),
                            xaxis_rangeslider_visible=False,legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
         fig2.update_xaxes(gridcolor="#1e293b"); fig2.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig2, width='stretch')
+        st.plotly_chart(fig2, use_container_width=True)
 
         la = av[~np.isnan(av)][-1] if np.any(~np.isnan(av)) else 0
         lp = pv[~np.isnan(pv)][-1] if np.any(~np.isnan(pv)) else 0
@@ -998,7 +998,7 @@ def main():
                             {"range":[30,100],"color":"rgba(0,255,136,.15)"}],
                    "threshold":{"line":{"color":"#fff","width":3},"thickness":.8,"value":conf}}))
         fg.update_layout(paper_bgcolor="#0a0e17",font=dict(color="#e2e8f0",family="JetBrains Mono"),height=250,margin=dict(l=30,r=30,t=30,b=10))
-        st.plotly_chart(fg, width='stretch')
+        st.plotly_chart(fg, use_container_width=True)
 
         # Breakdown
         st.markdown("##### Indicator Breakdown")
@@ -1034,7 +1034,7 @@ def main():
             f1.add_hline(y=70,line_dash="dash",line_color="#ff3366"); f1.add_hline(y=30,line_dash="dash",line_color="#00ff88")
             f1.add_hrect(y0=30,y1=70,fillcolor="rgba(245,158,11,.04)",line_width=0)
             f1.update_layout(**plot_cfg,title="RSI(14)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f1,width='stretch')
+            st.plotly_chart(f1,use_container_width=True)
         if "MACD" in ch_sel:
             f2=go.Figure()
             f2.add_trace(go.Scatter(x=dfp["timestamp"],y=res["macd_line"],name="MACD",line=dict(color="#3b82f6",width=2)))
@@ -1042,14 +1042,14 @@ def main():
             hc=["#00ff88" if h>=0 else "#ff3366" for h in res["macd_hist"]]
             f2.add_trace(go.Bar(x=dfp["timestamp"],y=res["macd_hist"],name="Hist",marker_color=hc,opacity=.5))
             f2.update_layout(**plot_cfg,title="MACD(12/26/9)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f2,width='stretch')
+            st.plotly_chart(f2,use_container_width=True)
         if "Stochastic" in ch_sel:
             f3=go.Figure()
             f3.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_k"],name="%K",line=dict(color="#06b6d4",width=2)))
             f3.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_d"],name="%D",line=dict(color="#f59e0b",width=1.5,dash="dot")))
             f3.add_hline(y=80,line_dash="dash",line_color="#ff3366"); f3.add_hline(y=20,line_dash="dash",line_color="#00ff88")
             f3.update_layout(**plot_cfg,title="Stochastic(14,3)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f3,width='stretch')
+            st.plotly_chart(f3,use_container_width=True)
         if "Bollinger Bands" in ch_sel:
             f4=go.Figure()
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=dfp["close"],name="Price",line=dict(color="#e2e8f0",width=2)))
@@ -1057,7 +1057,7 @@ def main():
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_lower"],name="Lower",line=dict(color="#3b82f6",width=1),fill="tonexty",fillcolor="rgba(59,130,246,.06)"))
             f4.add_trace(go.Scatter(x=dfp["timestamp"],y=res["bb_middle"],name="Mid",line=dict(color="#f59e0b",width=1,dash="dot")))
             f4.update_layout(**{**plot_cfg,"height":300},title="Bollinger(20,2)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f4,width='stretch')
+            st.plotly_chart(f4,use_container_width=True)
         if "StochRSI" in ch_sel:
             f5=go.Figure()
             f5.add_trace(go.Scatter(x=dfp["timestamp"],y=res["stoch_rsi_k"],name="StochRSI %K",line=dict(color="#06b6d4",width=2)))
@@ -1065,20 +1065,20 @@ def main():
             f5.add_hline(y=80,line_dash="dash",line_color="#ff3366"); f5.add_hline(y=20,line_dash="dash",line_color="#00ff88")
             f5.add_hrect(y0=20,y1=80,fillcolor="rgba(245,158,11,.03)",line_width=0)
             f5.update_layout(**plot_cfg,title="Stochastic RSI (14,14,3,3)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f5,width='stretch')
+            st.plotly_chart(f5,use_container_width=True)
         if "OBV" in ch_sel:
             f6=go.Figure()
             f6.add_trace(go.Scatter(x=dfp["timestamp"],y=res["obv"],name="OBV",line=dict(color="#a855f7",width=2)))
             f6.add_trace(go.Scatter(x=dfp["timestamp"],y=res["obv_ema"],name="OBV EMA(20)",line=dict(color="#f59e0b",width=1.5,dash="dot")))
             f6.update_layout(**plot_cfg,title="On-Balance Volume",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f6,width='stretch')
+            st.plotly_chart(f6,use_container_width=True)
         if "TSI" in ch_sel:
             f7=go.Figure()
             f7.add_trace(go.Scatter(x=dfp["timestamp"],y=res["tsi"],name="TSI",line=dict(color="#3b82f6",width=2)))
             f7.add_trace(go.Scatter(x=dfp["timestamp"],y=res["tsi_signal"],name="Signal",line=dict(color="#ff3366",width=1.5,dash="dot")))
             f7.add_hline(y=0,line_dash="dash",line_color="#475569")
             f7.update_layout(**plot_cfg,title="True Strength Index (25/13/7)",yaxis=dict(gridcolor="#1e293b"),xaxis=dict(gridcolor="#1e293b"))
-            st.plotly_chart(f7,width='stretch')
+            st.plotly_chart(f7,use_container_width=True)
 
         st.caption("Predictions are technical-indicator based only. NOT financial advice. Crypto is volatile and unregulated.")
 
@@ -1118,7 +1118,7 @@ def main():
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11),
                                   xaxis_rangeslider_visible=False)
             fig_sr.update_xaxes(gridcolor="#1e293b"); fig_sr.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_sr,width='stretch')
+            st.plotly_chart(fig_sr,use_container_width=True)
             srk_now = srk[~np.isnan(srk)][-1] if np.any(~np.isnan(srk)) else 50
             srd_now = srd[~np.isnan(srd)][-1] if np.any(~np.isnan(srd)) else 50
             zone = "OVERSOLD" if srk_now<20 else ("OVERBOUGHT" if srk_now>80 else "NEUTRAL")
@@ -1139,7 +1139,7 @@ def main():
             fig_ob.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
             fig_ob.update_xaxes(gridcolor="#1e293b"); fig_ob.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_ob,width='stretch')
+            st.plotly_chart(fig_ob,use_container_width=True)
 
         if "TSI" in adv_sel:
             tsi_v, tsi_s = ta.tsi(cl_a)
@@ -1154,7 +1154,7 @@ def main():
             fig_ts.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=450,
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
             fig_ts.update_xaxes(gridcolor="#1e293b"); fig_ts.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_ts,width='stretch')
+            st.plotly_chart(fig_ts,use_container_width=True)
             tn = tsi_v[~np.isnan(tsi_v)][-1] if np.any(~np.isnan(tsi_v)) else 0
             ts_n = tsi_s[~np.isnan(tsi_s)][-1] if np.any(~np.isnan(tsi_s)) else 0
             tc1,tc2 = st.columns(2)
@@ -1185,7 +1185,7 @@ def main():
                                   margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
                                   xaxis_rangeslider_visible=False,title="Pivot Trend (Higher Highs/Lows Detection)")
             fig_pv.update_xaxes(gridcolor="#1e293b"); fig_pv.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_pv,width='stretch')
+            st.plotly_chart(fig_pv,use_container_width=True)
             pvn = pvt[-1]
             st.markdown(f'<div class="mc"><div class="ml">Pivot Trend</div><div class="mv {"g" if pvn>0 else ("r" if pvn<0 else "go")}">{"UPTREND (HH+HL)" if pvn>0 else ("DOWNTREND (LH+LL)" if pvn<0 else "NEUTRAL")}</div></div>',unsafe_allow_html=True)
 
@@ -1222,7 +1222,7 @@ def main():
             fig_dv.update_layout(template="plotly_dark",paper_bgcolor="#0a0e17",plot_bgcolor="#0f1419",height=600,
                                   margin=dict(l=50,r=20,t=40,b=30),font=dict(family="JetBrains Mono",size=11))
             fig_dv.update_xaxes(gridcolor="#1e293b"); fig_dv.update_yaxes(gridcolor="#1e293b")
-            st.plotly_chart(fig_dv,width='stretch')
+            st.plotly_chart(fig_dv,use_container_width=True)
             recent_r = rdiv[-10:]
             recent_t = tdiv[-10:]
             has_bull = np.any(recent_r>0) or np.any(recent_t>0)
@@ -1273,7 +1273,7 @@ def main():
                               legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1),
                               yaxis_type="log",yaxis_title="BTC Price (log scale)")
         fig_pi.update_xaxes(gridcolor="#1e293b"); fig_pi.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig_pi,width='stretch')
+        st.plotly_chart(fig_pi,use_container_width=True)
 
         # Status cards
         pi111_now = pi_111[~np.isnan(pi_111)][-1] if np.any(~np.isnan(pi_111)) else 0
@@ -1305,7 +1305,7 @@ def main():
                               margin=dict(l=50,r=20,t=30,b=30),font=dict(family="JetBrains Mono",size=11),
                               yaxis_title="Ratio")
         fig_mv.update_xaxes(gridcolor="#1e293b"); fig_mv.update_yaxes(gridcolor="#1e293b")
-        st.plotly_chart(fig_mv,width='stretch')
+        st.plotly_chart(fig_mv,use_container_width=True)
 
         mv_now = mvrv_proxy[~np.isnan(mvrv_proxy)][-1] if np.any(~np.isnan(mvrv_proxy)) else 1
         if mv_now < 0.7: mv_status,mv_cls = "UNDERVALUED — Accumulation Zone","g"
@@ -1340,7 +1340,9 @@ def main():
     with tabs[6]:
         st.markdown("### Place Order")
         if not (api_key and secret_key):
-            st.warning("Enter API credentials in sidebar")
+            st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to place live orders.")
+            st.markdown("##### Order Form Preview")
+            st.caption("Once connected, you can place LIMIT/MARKET orders on BTC/INR, ETH/INR, BTC/USDT and options contracts.")
         else:
             o1,o2 = st.columns(2)
             with o1:
@@ -1378,59 +1380,133 @@ def main():
                     d=r.json().get("data",{})
                     b1,b2=st.columns(2)
                     with b1:
-                        st.markdown("**Bids**")
+                        st.markdown("**🟢 Bids**")
                         buys=d.get("buy",[])
                         if buys: st.dataframe(pd.DataFrame(buys if isinstance(buys[0],dict) else [{"price":x[0],"qty":x[1]} for x in buys]),width='stretch',height=300)
+                        else: st.caption("No bids available")
                     with b2:
-                        st.markdown("**Asks**")
+                        st.markdown("**🔴 Asks**")
                         sells=d.get("sell",[])
                         if sells: st.dataframe(pd.DataFrame(sells if isinstance(sells[0],dict) else [{"price":x[0],"qty":x[1]} for x in sells]),width='stretch',height=300)
-            except: st.info("Could not fetch")
-        else: st.caption("Connect API for live data")
+                        else: st.caption("No asks available")
+                else:
+                    st.warning(f"API returned status {r.status_code}")
+            except Exception as e: st.info(f"Could not fetch order book: {e}")
+        else:
+            st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to see live order book data.")
+            st.markdown("##### Simulated Order Book (Demo)")
+            b1,b2=st.columns(2)
+            base_price = btc_inr if "INR" in md_i else btc_usd
+            with b1:
+                st.markdown("**🟢 Bids**")
+                sim_bids = [{"Price":f"{base_price - i*base_price*0.001:.2f}","Quantity":f"{0.001+i*0.0005:.5f}"} for i in range(10)]
+                st.dataframe(pd.DataFrame(sim_bids),width='stretch',height=350)
+            with b2:
+                st.markdown("**🔴 Asks**")
+                sim_asks = [{"Price":f"{base_price + i*base_price*0.001:.2f}","Quantity":f"{0.001+i*0.0003:.5f}"} for i in range(10)]
+                st.dataframe(pd.DataFrame(sim_asks),width='stretch',height=350)
 
     # ═══ TAB 9: PORTFOLIO ═══
     with tabs[8]:
-        st.markdown("### Portfolio")
-        if not (api_key and secret_key): st.warning("Connect API")
-        elif api_mode=="CSX Exchange":
-            try:
-                r=cc.get_balance()
-                if r.status_code==200:
-                    bd=r.json().get("data",{}); av=bd.get("Available",{}); lk=bd.get("Locked",{})
-                    if av: st.dataframe(pd.DataFrame([{"Asset":a.upper(),"Available":float(q),"Locked":float(lk.get(a,0))} for a,q in av.items()]),width='stretch')
-            except Exception as e: st.error(str(e))
+        st.markdown("### Portfolio & Balances")
+        if not (api_key and secret_key):
+            st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to view your portfolio.")
+            st.markdown("##### Demo Portfolio")
+            demo_data = [
+                {"Asset":"BTC","Available":0.05420,"Locked":0.00000,"Value (USD)":f"${0.0542*btc_usd:,.2f}"},
+                {"Asset":"ETH","Available":2.35000,"Locked":0.50000,"Value (USD)":f"${2.35*3500:,.2f}"},
+                {"Asset":"USDT","Available":5000.00,"Locked":1200.00,"Value (USD)":"$5,000.00"},
+                {"Asset":"SOL","Available":15.00000,"Locked":0.00000,"Value (USD)":f"${15*150:,.2f}"},
+                {"Asset":"INR","Available":125000.00,"Locked":25000.00,"Value (USD)":f"${125000/85:,.2f}"},
+            ]
+            st.dataframe(pd.DataFrame(demo_data),width='stretch')
+            st.caption("This is simulated data. Connect API to see your real balances.")
+        else:
+            if st.button("🔄 Refresh Portfolio",key="ref_port"):
+                st.cache_data.clear()
+            if api_mode=="CSX Exchange":
+                try:
+                    r=cc.get_balance()
+                    if r.status_code==200:
+                        bd=r.json().get("data",{}); av=bd.get("Available",{}); lk=bd.get("Locked",{})
+                        if av:
+                            bdf = pd.DataFrame([{"Asset":a.upper(),"Available":float(q),"Locked":float(lk.get(a,0))} for a,q in av.items()])
+                            st.dataframe(bdf,width='stretch')
+                        else:
+                            st.info("No balances found in your account.")
+                    else:
+                        st.error(f"API Error: {r.status_code}")
+                except Exception as e: st.error(f"Connection error: {e}")
+            else:
+                try:
+                    r=lc.get_portfolio()
+                    if r.status_code==200:
+                        st.json(r.json())
+                    else:
+                        st.error(f"API Error: {r.status_code}")
+                except Exception as e: st.error(f"Connection error: {e}")
 
     # ═══ TAB 10: ORDERS ═══
     with tabs[9]:
-        st.markdown("### Orders")
-        if api_key and secret_key:
-            oc1,oc2=st.columns(2)
+        st.markdown("### Order History")
+        connected = bool(api_key and secret_key)
+        if not connected:
+            st.info("🔐 Connect your CoinSwitch PRO API keys in the sidebar to view and manage orders.")
+            st.markdown("##### Demo Orders")
+            demo_orders = pd.DataFrame([
+                {"Order ID":"abc-123","Instrument":"BTC/INR","Side":"BUY","Type":"LIMIT","Price":"7300000","Qty":"0.00050","Status":"OPEN","Time":"2026-04-23 10:30"},
+                {"Order ID":"def-456","Instrument":"ETH/INR","Side":"SELL","Type":"MARKET","Price":"Market","Qty":"1.50000","Status":"EXECUTED","Time":"2026-04-23 09:15"},
+                {"Order ID":"ghi-789","Instrument":"BTC/USDT","Side":"BUY","Type":"LIMIT","Price":"77500","Qty":"0.00100","Status":"CANCELLED","Time":"2026-04-22 18:45"},
+            ])
+            st.dataframe(demo_orders, width='stretch', height=200)
+            st.caption("Simulated data shown above. Connect API to see your real orders.")
+        if connected:
+            oc1, oc2 = st.columns(2)
             with oc1:
-                st.markdown("#### Open")
+                st.markdown("#### Open Orders")
                 try:
-                    r=cc.get_orders(only_open=True) if api_mode=="CSX Exchange" else lc.get_open_orders()
-                    if r.status_code==200:
-                        od=r.json().get("data",[]); od=od.get("orders",od) if isinstance(od,dict) else od
-                        if od: st.dataframe(pd.DataFrame(od if isinstance(od,list) else [od]),width='stretch')
-                        else: st.caption("None")
-                except Exception as e: st.caption(str(e))
+                    resp = cc.get_orders(only_open=True) if api_mode == "CSX Exchange" else lc.get_open_orders()
+                    if resp.status_code == 200:
+                        od = resp.json().get("data", [])
+                        if isinstance(od, dict):
+                            od = od.get("orders", [])
+                        if od and isinstance(od, list) and len(od) > 0:
+                            st.dataframe(pd.DataFrame(od), width='stretch')
+                        else:
+                            st.caption("No open orders")
+                    else:
+                        st.caption(f"API returned {resp.status_code}")
+                except Exception as e:
+                    st.caption(f"Could not fetch: {e}")
             with oc2:
-                st.markdown("#### Completed")
+                st.markdown("#### Completed Orders")
                 try:
-                    r=cc.get_orders(only_open=False) if api_mode=="CSX Exchange" else lc.get_closed_orders()
-                    if r.status_code==200:
-                        od=r.json().get("data",[]); od=od.get("orders",od) if isinstance(od,dict) else od
-                        if od: st.dataframe(pd.DataFrame(od if isinstance(od,list) else [od]),width='stretch')
-                        else: st.caption("None")
-                except Exception as e: st.caption(str(e))
-            cid=st.text_input("Cancel ID",key="cid")
-            if st.button("Cancel",type="secondary") and cid:
+                    resp = cc.get_orders(only_open=False) if api_mode == "CSX Exchange" else lc.get_closed_orders()
+                    if resp.status_code == 200:
+                        od = resp.json().get("data", [])
+                        if isinstance(od, dict):
+                            od = od.get("orders", [])
+                        if od and isinstance(od, list) and len(od) > 0:
+                            st.dataframe(pd.DataFrame(od), width='stretch')
+                        else:
+                            st.caption("No completed orders")
+                    else:
+                        st.caption(f"API returned {resp.status_code}")
+                except Exception as e:
+                    st.caption(f"Could not fetch: {e}")
+            st.divider()
+            st.markdown("#### Cancel an Order")
+            cancel_id = st.text_input("Enter Order ID to cancel", key="cid")
+            if st.button("Cancel Order", type="secondary") and cancel_id:
                 try:
-                    r=cc.cancel_order(cid) if api_mode=="CSX Exchange" else lc.cancel_order(cid)
-                    if r.status_code==200: st.success("Done"); st.json(r.json())
-                    else: st.error(r.text)
-                except Exception as e: st.error(str(e))
-        else: st.warning("Connect API")
+                    resp = cc.cancel_order(cancel_id) if api_mode == "CSX Exchange" else lc.cancel_order(cancel_id)
+                    if resp.status_code == 200:
+                        st.success("Order cancelled!")
+                        st.json(resp.json())
+                    else:
+                        st.error(resp.text)
+                except Exception as e:
+                    st.error(str(e))
 
     # ═══ TAB 11: P&L CALC ═══
     with tabs[10]:
